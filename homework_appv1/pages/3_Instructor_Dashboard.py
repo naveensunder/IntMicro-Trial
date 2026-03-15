@@ -11,6 +11,7 @@ st.set_page_config(
     page_title="Instructor Dashboard",
     page_icon="🔐",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown(SHARED_CSS, unsafe_allow_html=True)

@@ -11,6 +11,7 @@ st.set_page_config(
     page_title="Q9 — Tom & Jerry",
     page_icon="📙",
     layout="centered",
+    initial_sidebar_state="expanded",
 )
 
 guard_page()

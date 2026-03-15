@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="Intermediate Microeconomics — Week 2 Assignment",
     page_icon="📘",
     layout="centered",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ── Shared CSS ────────────────────────────────────────────────────────────────

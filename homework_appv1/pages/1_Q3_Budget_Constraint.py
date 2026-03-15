@@ -11,6 +11,7 @@ st.set_page_config(
     page_title="Q3 — Budget Constraint",
     page_icon="📗",
     layout="centered",
+    initial_sidebar_state="expanded",
 )
 
 # ── Auth guard ────────────────────────────────────────────────────────────────
