@@ -1,200 +1,387 @@
 """
-ui.py — Shared design system.
-HWDashboard v3 — stability-first build.
-Key rule: NO dynamic HTML assembly. Every st.markdown() block is
-a complete, static string. No f-string variable interpolation of HTML fragments.
+ui.py — Design system.
+HWDashboard v4 — readability-first redesign.
+Key changes:
+- Font sizes ~1.55x previous
+- Max 3 grey shades
+- More white space
+- Minimal borders
 """
 
 COLORS = {
-    "navy":        "#1C2B4A",
-    "navy_mid":    "#2C3E6B",
-    "accent":      "#2563EB",
-    "success":     "#16A34A",
-    "success_bg":  "#F0FDF4",
-    "success_bd":  "#BBF7D0",
-    "warning":     "#D97706",
-    "warning_bg":  "#FFFBEB",
-    "warning_bd":  "#FDE68A",
-    "error":       "#DC2626",
-    "error_bg":    "#FEF2F2",
-    "error_bd":    "#FECACA",
-    "neutral_50":  "#F9FAFB",
-    "neutral_100": "#F3F4F6",
-    "neutral_200": "#E5E7EB",
-    "neutral_300": "#D1D5DB",
-    "neutral_500": "#6B7280",
-    "neutral_700": "#374151",
-    "neutral_900": "#111827",
-    "white":       "#FFFFFF",
+    "navy":       "#1C2B4A",
+    "navy_mid":   "#2C3E6B",
+    "accent":     "#2563EB",
+    "success":    "#16A34A",
+    "warning":    "#D97706",
+    "error":      "#DC2626",
+    "grey_light": "#F5F5F5",   # backgrounds
+    "grey_mid":   "#E0E0E0",   # borders / dividers
+    "grey_text":  "#555555",   # secondary text
+    "black":      "#1A1A1A",   # primary text
+    "white":      "#FFFFFF",
+    "sol_bg":     "#F0F4F8",   # solution tint — light blue-grey
 }
 
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap');
 
+/* ── Base ── */
 html, body, [class*="css"] {
     font-family: 'DM Sans', sans-serif;
-    color: #111827;
+    font-size: 17px;
+    color: #1A1A1A;
 }
 #MainMenu, footer, header, .stDeployButton { visibility: hidden; display: none; }
-.block-container { padding-top: 1.8rem; padding-bottom: 3rem; max-width: 860px; }
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 4rem;
+    max-width: 820px;
+}
 
+/* ── Sidebar ── */
 [data-testid="stSidebar"] { background: #1C2B4A !important; }
-[data-testid="stSidebar"] * { color: #CBD5E1 !important; }
+[data-testid="stSidebar"] * { color: #CBD5E1 !important; font-size: 15px !important; }
 
+/* ── Page header ── */
 .page-header {
-    padding: 1.8rem 2rem; background: #1C2B4A;
-    border-radius: 10px; margin-bottom: 1.6rem;
+    padding: 2rem 2.2rem;
+    background: #1C2B4A;
+    border-radius: 10px;
+    margin-bottom: 2rem;
 }
 .page-header-eye {
-    font-size: 0.67rem; font-weight: 600; letter-spacing: 0.14em;
-    text-transform: uppercase; color: #94A3B8; margin-bottom: 0.3rem;
+    font-size: 0.75rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: #94A3B8; margin-bottom: 0.4rem;
 }
 .page-header-title {
     font-family: 'DM Serif Display', serif;
-    font-size: 1.65rem; color: #FFFFFF; line-height: 1.2; margin-bottom: 0.2rem;
+    font-size: 2rem; color: #FFFFFF;
+    line-height: 1.2; margin-bottom: 0.25rem;
 }
-.page-header-sub { font-size: 0.83rem; color: #94A3B8; }
+.page-header-sub { font-size: 1rem; color: #94A3B8; }
 
+/* ── Homework cards on dashboard ── */
 .hw-card {
-    background: #FFFFFF; border: 1px solid #E5E7EB;
-    border-radius: 10px; padding: 1.1rem 1.5rem; margin-bottom: 0.7rem;
+    background: #FFFFFF;
+    border: 1.5px solid #E0E0E0;
+    border-radius: 10px;
+    padding: 1.3rem 1.7rem;
+    margin-bottom: 0.9rem;
 }
 .hw-card-locked {
-    background: #F9FAFB; border: 1px solid #E5E7EB;
-    border-radius: 10px; padding: 1.1rem 1.5rem; margin-bottom: 0.7rem; opacity: 0.55;
+    background: #F5F5F5;
+    border: 1.5px solid #E0E0E0;
+    border-radius: 10px;
+    padding: 1.3rem 1.7rem;
+    margin-bottom: 0.9rem;
+    opacity: 0.6;
 }
-.hw-title { font-size: 0.96rem; font-weight: 600; color: #111827; margin-bottom: 0.12rem; }
-.hw-meta  { font-size: 0.79rem; color: #6B7280; }
-.hw-score { font-size: 0.82rem; color: #2563EB; font-weight: 500; margin-top: 0.1rem; }
+.hw-title { font-size: 1.1rem; font-weight: 600; color: #1A1A1A; margin-bottom: 0.2rem; }
+.hw-meta  { font-size: 0.9rem; color: #555555; margin-top: 0.15rem; }
+.hw-score { font-size: 0.92rem; color: #2563EB; font-weight: 600; margin-top: 0.2rem; }
+.hw-deadline-urgent { font-size: 0.92rem; color: #DC2626; font-weight: 600; margin-top: 0.15rem; }
 
-.badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 0.69rem; font-weight: 600; }
-.badge-open     { background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; }
-.badge-closed   { background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA; }
-.badge-locked   { background: #F3F4F6; color: #6B7280; border: 1px solid #D1D5DB; }
-.badge-complete { background: #EFF4FF; color: #2563EB; border: 1px solid #BFDBFE; }
+/* ── Badges ── */
+.badge {
+    display: inline-block; padding: 3px 11px;
+    border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+}
+.badge-open     { background: #ECFDF5; color: #16A34A; border: 1.5px solid #86EFAC; }
+.badge-closed   { background: #FEF2F2; color: #DC2626; border: 1.5px solid #FCA5A5; }
+.badge-locked   { background: #F5F5F5; color: #555555; border: 1.5px solid #E0E0E0; }
+.badge-complete { background: #EFF4FF; color: #2563EB; border: 1.5px solid #93C5FD; }
 
-.q-header {
-    background: #1C2B4A; border-radius: 10px 10px 0 0;
-    padding: 0.9rem 1.4rem; margin-top: 1rem;
+/* ── Question block — single unified card ── */
+.q-card {
+    background: #FFFFFF;
+    border: 1.5px solid #E0E0E0;
+    border-left: 5px solid #1C2B4A;
+    border-radius: 10px;
+    padding: 2rem 2rem 1.5rem 2rem;
+    margin-bottom: 1rem;
 }
-.q-header-title { font-family: 'DM Serif Display', serif; color: #FFFFFF; font-size: 1.05rem; }
-.q-header-pts   { color: #94A3B8; font-size: 0.77rem; margin-top: 0.1rem; }
+.q-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.35rem;
+    color: #1C2B4A;
+    margin-bottom: 0.15rem;
+}
+.q-pts {
+    font-size: 0.88rem;
+    color: #555555;
+    margin-bottom: 1.2rem;
+}
+.q-text {
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #1A1A1A;
+    margin-bottom: 1rem;
+}
+.q-part {
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #1A1A1A;
+    padding: 0.2rem 0 0.2rem 1.2rem;
+}
+.q-part-label {
+    font-weight: 600;
+    color: #1C2B4A;
+}
+.q-ungraded {
+    font-size: 0.82rem;
+    color: #888888;
+    font-style: italic;
+}
 
-.q-body {
-    background: #F9FAFB; border: 1px solid #E5E7EB; border-top: none;
-    border-radius: 0 0 10px 10px; padding: 1rem 1.4rem;
-    margin-bottom: 1rem; font-size: 0.91rem; line-height: 1.75;
+/* ── Parameters ── */
+.param-row {
+    background: #F5F5F5;
+    border-radius: 7px;
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    color: #555555;
+    margin-bottom: 1rem;
 }
-.part-row {
-    display: flex; align-items: flex-start; gap: 9px;
-    background: #FFFFFF; border: 1px solid #E5E7EB;
-    border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0.35rem 0;
+.param-val {
+    font-weight: 600;
+    color: #1A1A1A;
 }
-.part-badge {
-    background: #1C2B4A; color: #FFFFFF; border-radius: 4px;
-    padding: 2px 7px; font-size: 0.69rem; font-weight: 600;
-    white-space: nowrap; flex-shrink: 0; margin-top: 2px;
-}
-.part-text     { flex: 1; font-size: 0.87rem; line-height: 1.6; color: #374151; }
-.part-ungraded { background: #F3F4F6; color: #6B7280; border-radius: 4px; padding: 2px 7px; font-size: 0.67rem; white-space: nowrap; flex-shrink: 0; }
 
-.answer-area {
-    background: #FFFFFF; border: 1px solid #E5E7EB;
-    border-radius: 10px; padding: 1rem 1.4rem; margin-bottom: 0.8rem;
-}
+/* ── Answer section ── */
 .answer-label {
-    font-size: 0.67rem; font-weight: 600; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #6B7280; margin-bottom: 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #555555;
+    margin-bottom: 0.6rem;
+    margin-top: 1rem;
 }
 
-.param-chip {
-    display: inline-block; background: #F3F4F6; border: 1px solid #E5E7EB;
-    border-radius: 4px; padding: 2px 8px; font-size: 0.79rem;
-    color: #374151; margin: 2px 3px 2px 0;
+/* ── Question divider ── */
+.q-divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 2.5rem 0 2rem 0;
+}
+.q-divider-line {
+    flex: 1;
+    height: 3px;
+    background: #1C2B4A;
+    border-radius: 2px;
+}
+.q-divider-label {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1rem;
+    color: #1C2B4A;
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 0.3rem 1rem;
+    background: #1C2B4A;
+    color: #FFFFFF;
+    border-radius: 20px;
 }
 
-.sol-card { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 10px; overflow: hidden; margin-top: 0.8rem; }
-.sol-header { background: #1C2B4A; color: #FFFFFF; padding: 0.6rem 1.2rem; font-size: 0.86rem; font-weight: 600; }
-.sol-section { padding: 0.85rem 1.2rem; border-bottom: 1px solid #F3F4F6; }
-.sol-section:last-child { border-bottom: none; }
-.sol-label { font-size: 0.67rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #6B7280; margin-bottom: 0.45rem; }
-.sol-steps  { background: #EFF6FF; border-left: 3px solid #2563EB; border-radius: 0 5px 5px 0; padding: 0.8rem 0.95rem; font-size: 0.87rem; line-height: 1.8; }
-.sol-mistakes { background: #FFF7ED; border-left: 3px solid #F97316; border-radius: 0 5px 5px 0; padding: 0.8rem 0.95rem; font-size: 0.87rem; line-height: 1.8; }
-.sol-revise   { background: #F0FDF4; border-left: 3px solid #16A34A; border-radius: 0 5px 5px 0; padding: 0.8rem 0.95rem; font-size: 0.87rem; line-height: 1.8; }
+/* ── Solution block ── */
+.sol-block {
+    background: #F0F4F8;
+    border-radius: 8px;
+    padding: 1.5rem 1.8rem;
+    margin-top: 1.2rem;
+    font-size: 1rem;
+    line-height: 1.8;
+}
+.sol-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.15rem;
+    color: #1C2B4A;
+    margin-bottom: 1rem;
+}
+.sol-section-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #555555;
+    margin-bottom: 0.5rem;
+    margin-top: 1rem;
+}
+.sol-steps {
+    background: #FFFFFF;
+    border-left: 4px solid #2563EB;
+    border-radius: 0 6px 6px 0;
+    padding: 1rem 1.2rem;
+    font-size: 1rem;
+    line-height: 1.9;
+    color: #1A1A1A;
+}
+.sol-mistakes {
+    background: #FFFFFF;
+    border-left: 4px solid #F97316;
+    border-radius: 0 6px 6px 0;
+    padding: 1rem 1.2rem;
+    font-size: 1rem;
+    line-height: 1.9;
+    color: #1A1A1A;
+}
+.sol-revise {
+    background: #FFFFFF;
+    border-left: 4px solid #16A34A;
+    border-radius: 0 6px 6px 0;
+    padding: 1rem 1.2rem;
+    font-size: 1rem;
+    line-height: 1.9;
+    color: #1A1A1A;
+}
 
-.score-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.65rem; }
-.score-table th { background: #F3F4F6; padding: 6px 9px; text-align: left; font-weight: 600; color: #374151; border-bottom: 1px solid #E5E7EB; }
-.score-table td { padding: 6px 9px; border-bottom: 1px solid #F3F4F6; color: #374151; }
-.score-table .total-row td { background: #F9FAFB; font-weight: 600; border-bottom: none; }
-.chip-ok    { background: #F0FDF4; color: #16A34A; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; font-weight: 600; }
-.chip-wrong { background: #FEF2F2; color: #DC2626; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; font-weight: 600; }
+/* ── Score rows (replacing tables) ── */
+.score-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid #E0E0E0;
+    font-size: 1rem;
+    color: #1A1A1A;
+}
+.score-row:last-child { border-bottom: none; }
+.score-row-label { flex: 2; color: #555555; }
+.score-row-val   { flex: 1; text-align: center; font-weight: 500; }
+.score-row-total { font-weight: 700; color: #1C2B4A; font-size: 1.05rem; }
+.chip-ok    { background: #ECFDF5; color: #16A34A; border-radius: 4px; padding: 3px 9px; font-size: 0.88rem; font-weight: 600; }
+.chip-wrong { background: #FEF2F2; color: #DC2626; border-radius: 4px; padding: 3px 9px; font-size: 0.88rem; font-weight: 600; }
 
-.q-summary { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin-bottom: 1.3rem; }
-.q-summary th { background: #1C2B4A; color: #FFFFFF; padding: 7px 11px; text-align: left; font-size: 0.74rem; font-weight: 500; letter-spacing: 0.03em; }
-.q-summary td { padding: 7px 11px; border-bottom: 1px solid #F3F4F6; color: #374151; }
-.q-summary .total-row td { background: #F3F4F6; font-weight: 600; border-bottom: none; }
-.status-done { color: #16A34A; font-weight: 500; }
-.status-todo { color: #6B7280; }
+/* ── TF solution (text format) ── */
+.tf-item {
+    padding: 1rem 0;
+    border-bottom: 1px solid #E0E0E0;
+    font-size: 1rem;
+    line-height: 1.8;
+}
+.tf-item:last-child { border-bottom: none; }
+.tf-stmt   { font-weight: 500; color: #1A1A1A; margin-bottom: 0.4rem; }
+.tf-result { font-size: 0.95rem; margin-bottom: 0.4rem; }
+.tf-expl   { color: #555555; font-size: 0.95rem; line-height: 1.75; }
 
-.banner { border-radius: 7px; padding: 0.8rem 1rem; font-size: 0.87rem; margin: 0.65rem 0; }
-.banner-success { background: #F0FDF4; border: 1px solid #BBF7D0; color: #166534; }
-.banner-warning { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
-.banner-error   { background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; }
-.banner-info    { background: #EFF4FF; border: 1px solid #BFDBFE; color: #1E40AF; }
-.banner-locked  { background: #F5F3FF; border: 1px solid #DDD6FE; color: #5B21B6; }
-.banner-restore { background: #F9FAFB; border: 1px solid #D1D5DB; color: #374151; }
+/* ── Banners ── */
+.banner { border-radius: 8px; padding: 0.95rem 1.2rem; font-size: 1rem; margin: 0.8rem 0; line-height: 1.6; }
+.banner-success { background: #ECFDF5; border: 1.5px solid #86EFAC; color: #166534; }
+.banner-warning { background: #FFFBEB; border: 1.5px solid #FDE68A; color: #92400E; }
+.banner-error   { background: #FEF2F2; border: 1.5px solid #FCA5A5; color: #991B1B; }
+.banner-info    { background: #EFF4FF; border: 1.5px solid #93C5FD; color: #1E40AF; }
+.banner-locked  { background: #F5F3FF; border: 1.5px solid #C4B5FD; color: #5B21B6; }
+.banner-restore { background: #F5F5F5; border: 1.5px solid #E0E0E0; color: #555555; }
 
-.saved-ts { font-size: 0.78rem; color: #6B7280; margin-top: 0.3rem; font-style: italic; }
+/* ── Saved timestamp ── */
+.saved-ts { font-size: 0.88rem; color: #888888; margin-top: 0.3rem; font-style: italic; }
 
+/* ── Semester summary ── */
+.sem-box {
+    background: #1C2B4A; border-radius: 10px;
+    padding: 1.3rem 1.8rem; margin-bottom: 1.8rem;
+}
+.sem-label { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #94A3B8; margin-bottom: 0.25rem; }
+.sem-score { font-family: 'DM Serif Display', serif; font-size: 2rem; color: #FFFFFF; line-height: 1; }
+.sem-sub   { font-size: 0.92rem; color: #64748B; margin-top: 0.2rem; }
+
+/* ── Question overview rows (replacing table) ── */
+.ov-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    background: #FFFFFF;
+    border: 1.5px solid #E0E0E0;
+    border-radius: 8px;
+    margin-bottom: 0.4rem;
+    font-size: 1rem;
+}
+.ov-title  { flex: 3; font-weight: 500; color: #1A1A1A; }
+.ov-score  { flex: 1; text-align: center; color: #555555; }
+.ov-status { flex: 1; text-align: right; }
+.ov-done   { color: #16A34A; font-weight: 600; }
+.ov-todo   { color: #888888; }
+.ov-total  {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.8rem 1rem;
+    background: #1C2B4A; border-radius: 8px;
+    margin-top: 0.3rem; font-size: 1rem; color: #FFFFFF; font-weight: 600;
+}
+
+/* ── Inputs — larger ── */
 .stTextInput > div > div > input,
 .stNumberInput > div > div > input,
 .stTextArea > div > div > textarea {
-    border: 1px solid #D1D5DB !important; border-radius: 6px !important;
-    font-family: 'DM Sans', sans-serif !important; font-size: 0.9rem !important;
+    border: 1.5px solid #E0E0E0 !important;
+    border-radius: 7px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 1rem !important;
+    padding: 0.55rem 0.8rem !important;
+    color: #1A1A1A !important;
 }
 .stTextInput > div > div > input:focus,
 .stNumberInput > div > div > input:focus {
     border-color: #2563EB !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.08) !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
 }
+
+/* ── Radio buttons ── */
+.stRadio > div { gap: 1rem !important; }
+.stRadio label { font-size: 1rem !important; }
+
+/* ── Buttons ── */
 .stButton > button {
     background: #1C2B4A !important; color: #FFFFFF !important;
-    border: none !important; border-radius: 6px !important;
+    border: none !important; border-radius: 7px !important;
     font-family: 'DM Sans', sans-serif !important;
-    font-weight: 500 !important; font-size: 0.88rem !important;
-    padding: 0.45rem 1.3rem !important;
+    font-weight: 500 !important; font-size: 1rem !important;
+    padding: 0.55rem 1.5rem !important;
 }
 .stButton > button:hover { background: #2C3E6B !important; }
 
+/* ── Expander ── */
+.streamlit-expanderHeader { font-size: 1rem !important; }
+
+/* ── Mobile ── */
 .mobile-warn {
-    display: none; background: #FFFBEB; border: 1px solid #FDE68A;
-    border-radius: 7px; padding: 0.8rem 1rem; font-size: 0.85rem;
-    color: #92400E; margin-bottom: 0.8rem;
+    display: none; background: #FFFBEB; border: 1.5px solid #FDE68A;
+    border-radius: 8px; padding: 0.9rem 1.1rem; font-size: 1rem;
+    color: #92400E; margin-bottom: 1rem;
 }
 @media (max-width: 768px) { .mobile-warn { display: block; } }
 
-.faq-a { color: #374151; font-size: 0.87rem; line-height: 1.7; }
+/* ── Footer link ── */
+.page-footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid #E0E0E0;
+    font-size: 0.88rem;
+    color: #888888;
+    text-align: center;
+}
+.page-footer a { color: #2563EB; text-decoration: none; }
+
+/* ── FAQ ── */
+.faq-a { font-size: 1rem; color: #1A1A1A; line-height: 1.75; }
+
+/* ── Course materials ── */
 .mat-row {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.65rem 0.95rem; background: #FFFFFF;
-    border: 1px solid #E5E7EB; border-radius: 7px; margin-bottom: 0.35rem;
+    padding: 0.9rem 1.1rem; background: #FFFFFF;
+    border: 1.5px solid #E0E0E0; border-radius: 8px; margin-bottom: 0.45rem;
 }
-.mat-title { font-size: 0.89rem; font-weight: 500; color: #111827; }
-.mat-meta  { font-size: 0.75rem; color: #6B7280; margin-top: 0.08rem; }
+.mat-title { font-size: 1rem; font-weight: 500; color: #1A1A1A; }
+.mat-meta  { font-size: 0.88rem; color: #888888; margin-top: 0.1rem; }
 
-.sem-box {
-    background: #1C2B4A; border-radius: 10px;
-    padding: 1.1rem 1.5rem; margin-bottom: 1.4rem;
-}
-.sem-label { font-size: 0.67rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #94A3B8; margin-bottom: 0.2rem; }
-.sem-score { font-family: 'DM Serif Display', serif; font-size: 1.7rem; color: #FFFFFF; line-height: 1; }
-.sem-sub   { font-size: 0.78rem; color: #64748B; margin-top: 0.15rem; }
-
-.instructor-note {
-    background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 7px;
-    padding: 0.75rem 1rem; font-size: 0.84rem; color: #92400E; margin-bottom: 1rem;
-}
+/* ── Instructor ── */
+.dash-metric { background:#FFFFFF; border:1.5px solid #E0E0E0; border-radius:9px; padding:1.1rem 1.3rem; text-align:center; }
+.dash-metric-num { font-family:'DM Serif Display',serif; font-size:2rem; color:#1C2B4A; line-height:1; }
+.dash-metric-lbl { font-size:0.8rem; color:#555555; margin-top:0.3rem; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; }
+.sec { font-family:'DM Serif Display',serif; font-size:1.1rem; color:#1C2B4A; margin:1.6rem 0 0.7rem 0; padding-bottom:0.35rem; border-bottom:2px solid #E0E0E0; }
 </style>
 """
 
@@ -219,5 +406,31 @@ def page_header(eyebrow: str, title: str, sub: str = ""):
 
 def banner(text: str, kind: str = "info"):
     import streamlit as st
-    st.markdown(f'<div class="banner banner-{kind}">{text}</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="banner banner-{kind}">{text}</div>',
+        unsafe_allow_html=True
+    )
+
+
+def page_footer():
+    import streamlit as st
+    st.markdown(
+        '<div class="page-footer">'
+        'Questions? See the <a href="/FAQ">FAQ</a> or email '
+        '<a href="mailto:nsunder@bentley.edu">nsunder@bentley.edu</a>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+def q_divider(label: str):
+    """Bold navy divider between questions."""
+    import streamlit as st
+    st.markdown(
+        f'<div class="q-divider">'
+        f'<div class="q-divider-line"></div>'
+        f'<div class="q-divider-label">{label}</div>'
+        f'<div class="q-divider-line"></div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )

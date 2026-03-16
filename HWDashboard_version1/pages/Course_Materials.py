@@ -14,7 +14,7 @@ HOW TO ADD/UPDATE MATERIALS:
 import streamlit as st
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from ui import inject_css, page_header
+from ui import inject_css, page_header, page_footer
 
 st.set_page_config(page_title="Course Materials — Microeconomics", page_icon="📁",
                    layout="centered", initial_sidebar_state="expanded")
@@ -135,3 +135,5 @@ st.markdown(
     'nsunder@bentley.edu</a></div>',
     unsafe_allow_html=True
 )
+
+page_footer()

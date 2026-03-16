@@ -1,6 +1,6 @@
 """
 Home.py — Login page.
-HWDashboard v3 — stability-first build.
+HWDashboard v4
 """
 import streamlit as st
 import sys, os
@@ -12,7 +12,7 @@ from db import (
     check_login_attempts, record_failed_attempt, reset_login_attempts,
     get_student_submissions, get_homework_configs,
 )
-from ui import inject_css, COLORS
+from ui import inject_css, COLORS, page_footer
 
 st.set_page_config(
     page_title="Learning Intermediate Microeconomics",
@@ -20,24 +20,23 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed",
 )
-
 inject_css()
 
 st.markdown(f"""
 <style>
-.block-container {{ max-width: 450px; padding-top: 2.5rem; }}
+.block-container {{ max-width: 460px; padding-top: 2.5rem; }}
 .login-title {{
     font-family: 'DM Serif Display', serif;
-    font-size: 1.6rem; color: {COLORS['navy']};
+    font-size: 1.85rem; color: {COLORS['navy']};
     line-height: 1.25; margin-bottom: 0.2rem; text-align:center;
 }}
 .login-eye {{
-    font-size: 0.67rem; font-weight: 600; letter-spacing: 0.14em;
-    text-transform: uppercase; color: {COLORS['neutral_500']};
-    margin-bottom: 0.35rem; text-align:center;
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: {COLORS['grey_text']};
+    margin-bottom: 0.4rem; text-align:center;
 }}
-.login-sub {{ font-size: 0.81rem; color: {COLORS['neutral_500']}; text-align:center; margin-bottom:1.6rem; }}
-.inst-link {{ text-align:center; margin-top:1.8rem; font-size:0.73rem; }}
+.login-sub {{ font-size: 0.95rem; color: {COLORS['grey_text']}; text-align:center; margin-bottom:1.8rem; }}
+.inst-link {{ text-align:center; margin-top:1.8rem; font-size:0.82rem; }}
 .inst-link a {{ color:#9CA3AF; text-decoration:none; }}
 </style>
 """, unsafe_allow_html=True)
@@ -61,10 +60,8 @@ st.markdown("""
 
 if "login_flow" not in st.session_state:
     st.session_state["login_flow"] = "main"
-
 flow = st.session_state["login_flow"]
 
-# ════════════════════════════════════════════════════════════════════════════════
 if flow == "main":
     tab_in, tab_reg = st.tabs(["Sign In", "Create Account"])
 
@@ -73,7 +70,6 @@ if flow == "main":
             em = st.text_input("University email", placeholder="you@university.edu")
             pw = st.text_input("Password", type="password")
             go = st.form_submit_button("Sign In", use_container_width=True)
-
         if go:
             if not check_login_attempts():
                 pass
@@ -112,7 +108,7 @@ if flow == "main":
 
     with tab_reg:
         st.markdown(
-            '<div style="font-size:0.81rem;color:#6B7280;margin-bottom:0.7rem;">'
+            '<div style="font-size:0.95rem;color:#555555;margin-bottom:0.8rem;">'
             'You need the enrollment key from your instructor to register.</div>',
             unsafe_allow_html=True)
         with st.form("reg_form"):
@@ -124,7 +120,6 @@ if flow == "main":
                                  help="Minimum 8 characters")
             rp2 = st.text_input("Confirm password", type="password")
             rs  = st.form_submit_button("Create Account", use_container_width=True)
-
         if rs:
             errs = []
             if not rf.strip(): errs.append("First name is required.")
@@ -149,15 +144,14 @@ if flow == "main":
                         st.markdown(
                             '<div class="banner banner-warning">'
                             '📌 <strong>Important:</strong> Note down your password. '
-                            'You can reset it with the enrollment key if needed.</div>',
+                            'You can reset it using the enrollment key if needed.</div>',
                             unsafe_allow_html=True)
                     else:
                         st.error(f"Registration failed: {err}")
 
-# ════════════════════════════════════════════════════════════════════════════════
 elif flow == "reset_pw":
     st.markdown(
-        f'<div style="font-family:\'DM Serif Display\',serif;font-size:1.1rem;'
+        f'<div style="font-family:\'DM Serif Display\',serif;font-size:1.3rem;'
         f'color:{COLORS["navy"]};margin-bottom:1rem;">Reset Password</div>',
         unsafe_allow_html=True)
     with st.form("reset_form"):
@@ -187,7 +181,6 @@ elif flow == "reset_pw":
         st.session_state["login_flow"] = "main"
         st.rerun()
 
-# ════════════════════════════════════════════════════════════════════════════════
 elif flow == "force_reset":
     st.markdown(
         '<div class="banner banner-warning">Your instructor has requested a password reset. '
@@ -212,3 +205,4 @@ elif flow == "force_reset":
 st.markdown(
     '<div class="inst-link"><a href="/Instructor">Instructor access</a></div>',
     unsafe_allow_html=True)
+page_footer()
