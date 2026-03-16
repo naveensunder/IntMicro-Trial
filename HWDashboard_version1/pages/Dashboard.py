@@ -1,15 +1,22 @@
 """
 pages/Dashboard.py — Student landing page.
-Shows all homeworks with status, deadlines, and progress.
+HWDashboard v2 — Phase 1
+Features: semester score summary, per-hw scores, countdown timers,
+student name prominent, last login, no raw HTML leaking.
 """
 import streamlit as st
 import datetime
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from db import get_homework_configs, get_student_submissions, parse_deadline
+from db import (
+    get_homework_configs, get_student_submissions,
+    parse_deadline, check_auto_enable
+)
 from ui import inject_css, page_header, COLORS
-from question_engine import get_shuffled_questions, get_hw_summary, ALL_HW_CONFIGS
+from question_engine import (
+    get_shuffled_questions, get_hw_summary, ALL_HW_CONFIGS
+)
 
 st.set_page_config(
     page_title="Dashboard — Microeconomics",
@@ -20,66 +27,90 @@ st.set_page_config(
 
 inject_css()
 
-# ── Auth guard ────────────────────────────────────────────────────────────────
+# ── Auth guard ─────────────────────────────────────────────────────────────────
 if not st.session_state.get("authenticated"):
     st.warning("Please sign in first.")
     if st.button("Go to sign in"):
         st.switch_page("Home.py")
     st.stop()
 
-email = st.session_state["student_email"]
-name  = st.session_state["student_name"]
+email       = st.session_state["student_email"]
+name        = st.session_state["student_name"]
+record      = st.session_state.get("student_record", {})
+last_login  = record.get("Last_Login", "")
 
-# ── Refresh data ──────────────────────────────────────────────────────────────
-if st.button("↻ Refresh", key="dash_refresh"):
-    st.session_state["submissions"] = get_student_submissions(email)
-    st.session_state["hw_configs"]  = get_homework_configs()
-    st.rerun()
+# ── Refresh ────────────────────────────────────────────────────────────────────
+check_auto_enable()
+
+col_hd, col_rf = st.columns([5, 1])
+with col_rf:
+    if st.button("↻", help="Refresh", key="dash_refresh"):
+        st.session_state["submissions"] = get_student_submissions(email)
+        st.session_state["hw_configs"]  = get_homework_configs()
+        st.rerun()
 
 submissions = st.session_state.get("submissions", {})
 hw_configs  = st.session_state.get("hw_configs",  [])
 
 # ── Header ─────────────────────────────────────────────────────────────────────
-page_header(
-    "Intermediate Microeconomics",
-    "Homework Dashboard",
-    f"Welcome, {name}"
-)
+with col_hd:
+    page_header(
+        "Intermediate Microeconomics",
+        f"Welcome, {name}",
+        f"Homework Dashboard"
+        + (f" · Last sign-in: {last_login}" if last_login else "")
+    )
 
-# ── Overall progress ──────────────────────────────────────────────────────────
-total_hws   = len([c for c in hw_configs if c.get("Enabled","").upper() == "TRUE"])
-done_hws    = 0
-for c in hw_configs:
-    if c.get("Enabled","").upper() != "TRUE": continue
-    summary = get_hw_summary(c["HW_ID"], email, submissions)
-    if summary["all_done"]: done_hws += 1
+# ── Semester summary ───────────────────────────────────────────────────────────
+total_earned = 0
+total_max    = 0
+total_hws    = 0
+done_hws     = 0
 
-if total_hws > 0:
-    pct = int(done_hws / total_hws * 100)
+for cfg in hw_configs:
+    if cfg.get("Enabled", "").upper() != "TRUE":
+        continue
+    total_hws += 1
+    summary = get_hw_summary(cfg["HW_ID"], email, submissions)
+    total_earned += summary["total_score"]
+    total_max    += summary["total_max"]
+    if summary["all_done"]:
+        done_hws += 1
+
+if total_max > 0:
+    pct = int(total_earned / total_max * 100)
     st.markdown(f"""
-    <div class="progress-wrap">
-      <div class="progress-label">Semester Progress</div>
-      <div class="progress-bar-outer">
-        <div class="progress-bar-inner" style="width:{pct}%;"></div>
+    <div class="semester-summary">
+      <div>
+        <div class="sem-sum-label">Semester Score</div>
+        <div class="sem-sum-value">{total_earned} / {total_max}</div>
+        <div class="sem-sum-sub">{pct}% · {done_hws} of {total_hws} assignments complete</div>
       </div>
-      <div class="progress-text">{done_hws} of {total_hws} assignments fully submitted</div>
+      <div style="width:180px;">
+        <div class="progress-bar-outer" style="height:8px;">
+          <div class="progress-bar-inner" style="width:{pct}%;"></div>
+        </div>
+        <div style="font-size:0.75rem;color:#64748B;margin-top:0.3rem;">
+          {total_earned} pts earned of {total_max} possible
+        </div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ── Homework list ─────────────────────────────────────────────────────────────
+# ── Assignment list ────────────────────────────────────────────────────────────
 st.markdown(f"""
-<div style="font-size:0.72rem;font-weight:600;letter-spacing:0.1em;
- text-transform:uppercase;color:{COLORS['neutral_500']};margin-bottom:0.8rem;">
+<div style="font-size:0.68rem;font-weight:600;letter-spacing:0.12em;
+ text-transform:uppercase;color:{COLORS['neutral_500']};margin-bottom:0.7rem;">
   Assignments
 </div>
 """, unsafe_allow_html=True)
 
 if not hw_configs:
-    st.markdown('<div class="banner-info">No assignments have been posted yet. Check back soon.</div>',
+    st.markdown('<div class="banner-info">No assignments have been posted yet.</div>',
                 unsafe_allow_html=True)
 
-# Sort by HW_ID
 sorted_configs = sorted(hw_configs, key=lambda x: x.get("HW_ID", ""))
+now = datetime.datetime.now()
 
 for cfg in sorted_configs:
     hw_id     = cfg.get("HW_ID", "")
@@ -93,86 +124,119 @@ for cfg in sorted_configs:
     past_hard, past_soft, dl_dt, dl_grace = parse_deadline(deadline, grace_min)
     summary = get_hw_summary(hw_id, email, submissions)
 
-    # Status badge
+    # ── Badge (text only — no raw HTML in variables) ───────────────────────────
     if not enabled:
-        badge = '<span class="badge badge-locked">Not yet available</span>'
-        card_class = "hw-card-locked"
+        badge_cls  = "badge-locked"
+        badge_text = "Not yet available"
     elif past_hard:
-        badge = '<span class="badge badge-closed">Closed</span>'
-        card_class = "hw-card"
+        badge_cls  = "badge-closed"
+        badge_text = "Closed"
     elif summary["all_done"]:
-        badge = '<span class="badge badge-complete">Complete</span>'
-        card_class = "hw-card"
+        badge_cls  = "badge-complete"
+        badge_text = "Complete"
     else:
-        badge = '<span class="badge badge-open">Open</span>'
-        card_class = "hw-card"
+        badge_cls  = "badge-open"
+        badge_text = "Open"
 
-    # Deadline string
+    # ── Deadline display ───────────────────────────────────────────────────────
     try:
         dl_str = dl_dt.strftime("%d %b %Y, %H:%M")
-        remaining = dl_grace - datetime.datetime.now()
-        if remaining.total_seconds() > 0 and enabled and not past_hard:
-            days = remaining.days
-            hours = (remaining.seconds) // 3600
-            if days > 0:
-                time_left = f" · {days}d {hours}h left"
-            else:
-                time_left = f" · {hours}h left"
-        else:
-            time_left = ""
     except Exception:
-        dl_str = deadline; time_left = ""
+        dl_str = deadline
 
-    # Progress within homework
-    n_sub = summary["n_submitted"]; n_tot = summary["n_total"]
-    hw_progress = f"{n_sub}/{n_tot} questions submitted"
-    if summary["all_done"] and n_tot > 0:
-        score_str = f" · Score: {summary['total_score']}/{summary['total_max']}"
-    else:
-        score_str = ""
+    # ── Countdown ─────────────────────────────────────────────────────────────
+    countdown_html = ""
+    if enabled and not past_hard:
+        rem = dl_grace - now
+        if rem.total_seconds() > 0:
+            d = rem.days
+            h = (rem.seconds) // 3600
+            m = (rem.seconds % 3600) // 60
+            urgent = d == 0 and h < 6
+            cls = "countdown-urgent" if urgent else ""
+            if d > 0:
+                time_left = f"{d}d {h}h {m}m remaining"
+            elif h > 0:
+                time_left = f"{h}h {m}m remaining"
+            else:
+                time_left = f"{m}m remaining"
+            countdown_html = (
+                f'<span class="countdown-item {cls}">'
+                f'⏳ <span class="countdown-value {cls}">{time_left}</span>'
+                f'</span>'
+            )
+
+    # ── Score display ──────────────────────────────────────────────────────────
+    score_html = ""
+    if summary["n_submitted"] > 0:
+        if summary["all_done"]:
+            score_html = (
+                f'<div class="hw-score">'
+                f'Score: {summary["total_score"]} / {summary["total_max"]}'
+                f'</div>'
+            )
+        else:
+            score_html = (
+                f'<div class="hw-score">'
+                f'{summary["n_submitted"]} of {summary["n_total"]} questions submitted'
+                f' · {summary["total_score"]} pts so far'
+                f'</div>'
+            )
+
+    # ── Announcement ──────────────────────────────────────────────────────────
+    ann_html = ""
+    if announce:
+        ann_html = (
+            f'<div class="hw-meta" style="color:{COLORS["warning"]};margin-top:0.25rem;">'
+            f'📢 {announce}'
+            f'</div>'
+        )
+
+    # ── Card (all values safely interpolated, no bare HTML) ───────────────────
+    card_cls = "hw-card-locked" if not enabled else "hw-card"
 
     st.markdown(f"""
-    <div class="{card_class}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
+    <div class="{card_cls}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+        <div style="flex:1;min-width:0;">
           <div class="hw-title">{title}</div>
-          <div class="hw-meta">
-            Deadline: {dl_str}{time_left}
-            &nbsp;·&nbsp; {max_marks} pts total
-          </div>
-          <div class="hw-meta" style="margin-top:0.15rem;">
-            {hw_progress}{score_str}
-          </div>
-          {'<div class="hw-meta" style="color:#D97706;margin-top:0.3rem;">📢 ' + announce + '</div>' if announce else ''}
+          <div class="hw-meta">Deadline: {dl_str} &nbsp;·&nbsp; {max_marks} pts</div>
+          <div class="countdown-bar">{countdown_html}</div>
+          {score_html}
+          {ann_html}
         </div>
-        <div style="flex-shrink:0;margin-left:1rem;">{badge}</div>
+        <div style="flex-shrink:0;">
+          <span class="badge {badge_cls}">{badge_text}</span>
+        </div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Open button
     if enabled and not past_hard:
-        if st.button(f"Open {title}", key=f"open_{hw_id}", use_container_width=False):
+        if st.button(f"Open {title} →",
+                     key=f"open_{hw_id}"):
             st.session_state["current_hw"] = hw_id
             st.switch_page("pages/Homework.py")
 
-# ── Completion screen ─────────────────────────────────────────────────────────
+# ── All complete screen ────────────────────────────────────────────────────────
 if total_hws > 0 and done_hws == total_hws:
     st.markdown(f"""
     <div style="background:{COLORS['navy']};border-radius:10px;
          padding:1.8rem;text-align:center;margin-top:1.5rem;">
       <div style="font-family:'DM Serif Display',serif;color:white;
-           font-size:1.3rem;margin-bottom:0.4rem;">All assignments submitted</div>
-      <div style="color:#94A3B8;font-size:0.88rem;">
-        You have completed all available homework. Well done.
+           font-size:1.25rem;margin-bottom:0.35rem;">
+        All assignments submitted
+      </div>
+      <div style="color:#94A3B8;font-size:0.86rem;">
+        Final semester score: {total_earned} / {total_max} pts
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ── Sign out ──────────────────────────────────────────────────────────────────
+# ── Sign out ───────────────────────────────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
 if st.button("Sign out", key="signout"):
-    for key in ["authenticated","student_email","student_name","student_record",
-                "submissions","hw_configs","current_hw","login_flow"]:
-        st.session_state.pop(key, None)
+    for k in ["authenticated","student_email","student_name","student_record",
+              "submissions","hw_configs","current_hw","login_flow"]:
+        st.session_state.pop(k, None)
     st.switch_page("Home.py")

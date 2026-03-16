@@ -1,4 +1,4 @@
-# HWDashboard_version1 — Complete Guide
+# HWDashboard v2 — Complete Guide
 ## Learning Intermediate Microeconomics — Prof. Naveen Sunder
 
 ---
@@ -6,266 +6,296 @@
 ## File Structure
 
 ```
-HWDashboard_version1/
+HWDashboard_v2/
 ├── Home.py                  ← Login page (entry point)
-├── db.py                    ← All database / Google Sheets operations
+├── db.py                    ← All Google Sheets operations
 ├── ui.py                    ← Shared CSS and design system
 ├── question_engine.py       ← All question logic and rendering
 ├── requirements.txt
 ├── secrets.toml             ← Your credentials (DO NOT upload to GitHub)
 └── pages/
-    ├── Dashboard.py         ← Student landing page (homework list)
+    ├── Dashboard.py         ← Student landing page
     ├── Homework.py          ← Homework question renderer
+    ├── FAQ.py               ← Student FAQ page
+    ├── Course_Materials.py  ← Course materials with links
     └── Instructor.py        ← Instructor dashboard (password protected)
 ```
 
 ---
 
-## What This System Does
+## What's New in v2 (Phase 1)
 
-- Students log in with email + password
-- New students register using an enrollment key you provide
-- Each student gets a unique version of every question (seeded by email)
-- Answers, scores, and timestamps are written to Google Sheets automatically
-- Students can leave and return — progress is always restored
-- Once a question is submitted, it is locked permanently
-- A deadline system with grace period controls all submissions
-- You manage everything (deadlines, student accounts, homework enable/disable)
-  directly from the Instructor Dashboard — no code changes needed
-- Copying detection compares answers across students with different parameters
+**Bug fixes:**
+- Raw HTML no longer leaks onto the Dashboard card
+- True/False question TypeError is fixed — the app no longer crashes on Week 2 homework
+
+**Student-facing improvements:**
+- Semester score summary at top of Dashboard (total earned / total possible)
+- Per-homework score shown on each homework card with countdown timer
+- Student name and last login shown prominently
+- Question summary table at top of each homework with clickable links
+- Full read-only review mode after all questions submitted (useful for exam prep)
+- Print to PDF button in review mode
+- Topics to revise shown after each solution based on wrong answers
+- Mobile warning shown on small screens
+- Unsaved answers warning when navigating away
+- Extension request form on homework page after deadline
+- FAQ page in sidebar
+- Course Materials page in sidebar with Dropbox/Drive links
+
+**Instructor improvements:**
+- Homework instructions field (shown to students before starting)
+- Auto-enable date per homework (no manual toggling needed)
+- Individual access grants per student with custom deadline
+- Extension request approval workflow
+- Plagiarism report download button
+- Copy enrollment key button
+- Gradebook export (one row per student, total scores)
+- Question analytics (success rates per question)
+- Preview as student mode
 
 ---
 
 ## Part 1 — First-Time Setup
 
-### Step 1 — Google Sheet
+### Step 1 — Critical: Delete the old Config tab
 
-1. Go to drive.google.com → New → Google Sheets
-2. Name it something like `Microeconomics_HW_Dashboard`
-3. The Sheet ID is already set in `secrets.toml`:
-   `1QQHk9bf9kC-35im2mswvUwSTymnb4rCv1yYLgbfu9xA`
+If you are upgrading from v1, the Config tab structure has changed.
 
-   **Important:** The service account has already been given access to this Sheet
-   (you did this earlier). The Sheet will auto-create three tabs on first run:
-   `Registry`, `Submissions`, `Config`.
-   You do not need to create them manually.
+1. Go to your Google Sheet
+2. Right-click the **Config** tab → Delete
+3. The new app will recreate it correctly on first load
 
-### Step 2 — GitHub Repository
+If this is a brand new deployment, skip this step.
 
-1. Go to github.com → Sign in → New repository
-2. Name it e.g. `microeconomics-hw-dashboard`
-3. Set to **Private** (recommended) or Public
-4. Upload ALL files from `HWDashboard_version1/` EXCEPT `secrets.toml`
-   - Upload: `Home.py`, `db.py`, `ui.py`, `question_engine.py`,
-     `requirements.txt`, and the entire `pages/` folder
-   - Do NOT upload `secrets.toml` — it contains your private credentials
+### Step 2 — GitHub
 
-### Step 3 — Deploy on Streamlit Community Cloud
+1. Go to github.com → New repository (Private recommended)
+2. Upload ALL files EXCEPT `secrets.toml`:
+   - `Home.py`, `db.py`, `ui.py`, `question_engine.py`, `requirements.txt`
+   - Entire `pages/` folder with all 5 files inside
 
-1. Go to share.streamlit.io → Sign in with GitHub
-2. Click **"Create app"**
-3. Fill in:
-   - **Repository:** select your repo
-   - **Branch:** main
-   - **Main file path:** `Home.py`
-4. Click **"Advanced settings"** → **Secrets**
-5. Open your `secrets.toml` file in Notepad
-6. Select all text → Copy → Paste into the Secrets box
-7. Click **Deploy**
-8. Wait 2-3 minutes. Your app is live at a URL like:
-   `https://your-app-name.streamlit.app`
+### Step 3 — Streamlit Deploy
 
-### Step 4 — First Login as Instructor
+1. share.streamlit.io → Create app → select your repo
+2. Main file path: `Home.py`
+3. Advanced settings → Secrets → paste entire contents of `secrets.toml`
+4. Deploy
+
+### Step 4 — First Login
 
 1. Go to your app URL
-2. Scroll to the very bottom → click **"Instructor access"** (small grey link)
-3. Default password is: `Microeconomics`
-4. **Change this immediately** in the Settings tab of the dashboard
+2. Scroll to bottom → click **"Instructor access"**
+3. Default password: `Microeconomics`
+4. **Change it immediately** in Settings tab
 
-### Step 5 — Get the Enrollment Key
+### Step 5 — Share Enrollment Key
 
-1. Sign in as instructor
-2. The enrollment key is displayed prominently on the Overview tab
-3. Share this key with your students so they can create accounts
+Instructor Dashboard → Overview tab → copy the enrollment key → share with students.
 
 ---
 
-## Part 2 — Normal Semester Workflow
+## Part 2 — Adding Course Materials
 
-### Adding a New Homework Assignment
+Course materials are managed in `pages/Course_Materials.py`. No database needed — links are stored directly in the file.
 
-1. Sign in as instructor → Homework Manager tab
-2. Scroll to **"Add New Assignment"**
-3. Fill in:
-   - **Homework ID:** use format `HW_WEEK3`, `HW_WEEK4` etc.
-   - **Title:** what students will see
-   - **Deadline date and time**
-   - **Grace period:** extra minutes after deadline (default 15)
-   - **Max marks:** for display on the dashboard
-4. Click **Add Assignment**
-5. **Important:** The assignment is only a display entry in the dashboard.
-   To add actual questions, you also need to add a config block in `question_engine.py`
-   (see "Adding Questions" section below).
-6. Enable/disable the homework using the toggle in Homework Manager
+### How to add a material
 
-### Adding Questions to a Homework (requires code edit)
+Open `Course_Materials.py` and find the `MATERIALS` dictionary. Each section (Lecture Slides, Readings, etc.) contains a list of items. Add a new item like this:
 
-Open `question_engine.py`. Near the bottom, find `ALL_HW_CONFIGS`.
-Copy the `HW_WEEK2_CONFIG` block and modify it for your new homework.
-Each question needs:
-- `q_id`: unique ID (e.g. "Q1")
-- `type`: "numerical" or "truefalse"
-- `title`: display name
-- `marks`: point value
+```python
+{
+    "title":       "Week 4 — Demand Theory",
+    "description": "Slides covering income and substitution effects.",
+    "url":         "https://www.dropbox.com/your-link-here",
+    "updated":     "01 Feb 2026",
+    "file_type":   "PPTX",
+},
+```
 
-For numerical questions, you also need to add:
-- A `_params()` function that generates randomised numbers
-- A `_render_qX()` function that draws the question UI
-- Follow the exact pattern of `_render_q3()` or `_render_q9()`
+Then push to GitHub. Streamlit auto-updates within a minute.
 
-For True/False questions, just update the `TF_STATEMENTS` list.
+### How to get a Dropbox link
 
-This is the main place you'll need to edit code each week.
+1. Upload file to Dropbox
+2. Right-click → Share → Copy link
+3. Change `dl=0` at the end to `dl=1` (forces download) or leave as `dl=0` (opens in browser)
+4. Paste into the `url` field
 
-### Enabling/Disabling a Homework
+### How to get a Google Drive link
 
-Instructor Dashboard → Homework Manager → find the homework → toggle "Enabled"
-Takes effect immediately. Students will see locked homeworks as greyed out.
+1. Upload to Google Drive
+2. Right-click → Share → "Anyone with the link" → Copy link
+3. Paste into the `url` field
 
-### Changing a Deadline
+### How to update a file
 
-Instructor Dashboard → Homework Manager → find the homework → change date/time → "Update deadline"
-No redeployment needed.
+**Option A (recommended):** Replace the file in Dropbox/Drive with the same filename. The link stays the same. Just update the `"updated"` date in the code and push to GitHub.
 
-### Posting an Announcement
+**Option B:** Upload a new file, get a new link, replace the `"url"` value and push.
 
-Instructor Dashboard → Homework Manager → find the homework → fill in "Announcement"
-Shown to students on the Dashboard and inside the homework.
+### How to add a new section
 
-### Adding Students
+In `Course_Materials.py`, add a new key to the `MATERIALS` dictionary:
 
-**Option A — Self-registration (recommended):**
-Share the enrollment key (visible on Overview tab) with students.
-They register themselves at the app URL.
-
-**Option B — Bulk import:**
-Instructor Dashboard → Student Manager → paste email list (one per line) → Bulk Enroll
-Students are registered with password `TempPass123` and forced to reset on first login.
-
-### Resetting a Student's Password
-
-Instructor Dashboard → Student Manager → select student → Set temporary password
-Tell the student their temporary password. They can then change it themselves.
-
-### Viewing Grades
-
-Instructor Dashboard → Overview tab → Full Submission Log → Download CSV
-The CSV contains: Timestamp, Email, Homework_ID, Question_ID, Score, Max_Score,
-Raw answers, Is_Late flag, Param_Seed (for verification).
+```python
+"Exam Prep": [
+    {
+        "title": "Midterm Practice Problems",
+        ...
+    }
+],
+```
 
 ---
 
-## Part 3 — Student Flow
+## Part 3 — Normal Semester Workflow
 
-1. Student goes to the app URL
-2. First time: clicks "Create Account" → enters name, email, enrollment key, password
-3. Sees a note to save their password
-4. Signs in → sees the homework dashboard
-5. Clicks on an open homework → sees questions in randomised order
-6. Fills in answers → Submit button appears when all fields are filled
-7. After submitting each question: sees score + full solution immediately
-8. Can leave and return: previous answers and submission status are restored
-9. Once all questions submitted: sees completion screen with final score
+### Enable/disable a homework
+Instructor Dashboard → Homework Manager → toggle "Enabled" on/off.
 
----
+### Schedule a homework to auto-enable
+Homework Manager → open the homework → set Auto-enable date and time.
+The homework will enable itself automatically at that moment — no action needed from you.
 
-## Part 4 — End of Semester Reset
+### Set an announcement
+Homework Manager → open the homework → fill in "Student announcement" → Save.
+Shown on the Dashboard card and inside the homework page.
 
-At the end of each semester, do the following in order:
+### Add instructions to a homework
+Homework Manager → open the homework → fill in "Assignment instructions" → Save.
+Shown to students at the top of the homework page before they start.
 
-### Step 1 — Download all data
-Instructor Dashboard → Overview tab → Full Submission Log → Download CSV
-Save this file. It is your permanent grade record.
+### Change a deadline
+Homework Manager → open the homework → change date/time → "Update deadline".
 
-### Step 2 — Download student list
-Instructor Dashboard → Student Manager → Download student list CSV
-Save this too.
+### Grant an individual extension
+Two ways:
+1. **Student requests it:** After the deadline, students see a "Request an extension" form on the homework page. The request appears in the Extension Requests tab of your dashboard. You approve it with a custom deadline.
+2. **You grant it directly:** Homework Manager → open the homework → "Grant individual access" section → enter the student email and new deadline.
 
-### Step 3 — Clear the Registry (student accounts)
-Instructor Dashboard → Settings tab → "End-of-Semester Reset" → Clear all student accounts
-This removes all student logins so new students can register fresh next semester.
-**Your grades data in the Submissions tab is NOT deleted.**
+### Add students
+- **Self-registration:** Share the enrollment key. Students register themselves.
+- **Bulk import:** Student Manager tab → paste email list → Bulk Enroll. Students get `TempPass123` and are forced to reset on first login.
 
-### Step 4 — Archive the Submissions sheet (optional but recommended)
-In Google Sheets, right-click the "Submissions" tab → Duplicate → rename it
-`Submissions_Semester1_2024` or similar. Then clear the original Submissions tab.
+### View grades
+Overview tab → Full Submission Log → Download CSV (all raw data)
+Overview tab → Download Gradebook CSV (one row per student, total scores ready to submit)
 
-### Step 5 — Generate a new enrollment key
-The key rotates automatically every 6 months.
-If you want to force a new key now: in Google Sheets → Config tab →
-find the row with `enrollment_key_created` → change the date to 2020-01-01 →
-reload the app. A new key will be generated.
-
-### Step 6 — Disable old homeworks and add new ones
-Instructor Dashboard → Homework Manager → toggle off old homeworks →
-add new ones for the upcoming semester.
-
-### Do NOT:
-- Delete the Google Sheet itself (you'll lose config)
-- Delete the Config tab (contains homework settings and audit log)
-- Change the SHEET_ID in secrets (it's already pointing to the right sheet)
+### Preview as a student
+Student Manager tab → Preview as Student → select email → Enter preview mode.
+You see the app exactly as that student sees it. Sign out to return to normal.
 
 ---
 
-## Part 5 — Troubleshooting
+## Part 4 — Adding New Homework Questions (requires code edit)
 
-**"Could not connect to Google Sheet"**
-→ The service account email needs Editor access on the Sheet.
-   Go to your Google Sheet → Share → paste `microeconomics@iron-bedrock-490320-u6.iam.gserviceaccount.com` → Editor.
-→ Check that Google Sheets API and Google Drive API are enabled in your Google Cloud project.
+Open `question_engine.py`. Find `ALL_HW_CONFIGS` near the top. Add a new config:
 
-**"No questions found for this assignment"**
-→ The homework ID in the dashboard config must exactly match the key in
-   `ALL_HW_CONFIGS` in `question_engine.py`. Check for typos (case-sensitive).
+```python
+HW_WEEK3_CONFIG = {
+    "hw_id": "HW_WEEK3",
+    "questions": [
+        {"q_id": "Q1", "type": "numerical",  "title": "Q1 — Demand Curve", "marks": 6},
+        {"q_id": "QTF","type": "truefalse",  "title": "Q2 — True or False", "marks": 4},
+    ]
+}
 
-**Student can't register — enrollment key rejected**
-→ Check the key on the Instructor Dashboard (Overview tab).
-   Keys are case-insensitive but must match exactly.
+ALL_HW_CONFIGS = {
+    "HW_WEEK2": HW_WEEK2_CONFIG,
+    "HW_WEEK3": HW_WEEK3_CONFIG,  # ← add here
+}
+```
 
-**Tabs not showing in the sidebar**
-→ Make sure all pages are in the `pages/` folder with the correct filenames.
-   Streamlit requires the `pages/` folder to be at the same level as `Home.py`.
+For each new numerical question you also need:
+- A `_params_qX(email)` function generating randomised numbers
+- A `_render_qX(...)` function building the UI (copy from `_render_q3` as a template)
+- A `_show_qX_solution(...)` function showing the worked solution
 
-**Answers not saving to the sheet**
-→ Check the Streamlit Logs (on share.streamlit.io, click your app → "Manage app" → logs).
-   Look for any authentication or permission errors.
+For True/False: just update the `TF_STATEMENTS` list at the top of `question_engine.py`.
 
-**Score shows 0 even though answer looks correct**
-→ This system uses exact matching (zero tolerance). The student's answer must
-   match exactly. For decimal answers like Jerry's bundle, they must enter
-   the exact decimal (e.g. 6.6667 not 6.67). Consider communicating this
-   to students in your instructions.
+After editing, push to GitHub and Streamlit will update automatically.
+
+---
+
+## Part 5 — End-of-Semester Reset
+
+Do these steps in order. Do not skip Step 1.
+
+### Step 1 — Download everything
+- Overview tab → Download CSV (full submission log — keep this permanently)
+- Overview tab → Download Gradebook CSV (for grade submission)
+- Student Manager → Download student list CSV
+
+### Step 2 — Archive the Submissions sheet (recommended)
+In Google Sheets, right-click the Submissions tab → Duplicate → rename it
+`Submissions_Fall2026` or similar. Then clear the original Submissions tab
+(keep the header row).
+
+### Step 3 — Clear student accounts
+Instructor Dashboard → Settings → End-of-Semester Reset → Clear all student accounts.
+This removes all logins so new students can register fresh next semester.
+Your grade data in the Submissions sheet is not affected.
+
+### Step 4 — Rotate the enrollment key (optional)
+The key rotates automatically every 6 months. To force a new key now:
+In Google Sheets → Config tab → find the `enrollment_key_created` row →
+change the date to `2020-01-01` → reload the app. A new key is generated.
+
+### Step 5 — Disable old homeworks
+Homework Manager → toggle off all old homeworks. Add new ones for the new semester.
+
+### Do NOT
+- Delete the Google Sheet itself
+- Delete the Config tab
+- Change the `SHEET_ID` in secrets
+
+---
+
+## Part 6 — Troubleshooting
+
+**"Instructor access" with password `Microeconomics` is rejected**
+→ The Config tab may exist but be empty (a known initialisation issue).
+   Delete the Config tab entirely → reload the app → it will recreate with defaults.
+
+**No questions showing on homework page / TypeError**
+→ This was a known bug in v1, fixed in v2. If it recurs, check that the `HW_ID`
+   in the Homework Manager exactly matches the key in `ALL_HW_CONFIGS`
+   in `question_engine.py` (case-sensitive).
+
+**Raw HTML visible on dashboard**
+→ Fixed in v2. If it reappears in a future edit, check that no HTML is built
+   using f-strings where the variable contains unescaped angle brackets.
+
+**Submission not saving**
+→ Check Streamlit logs (Manage app → Logs). Look for Sheets API errors.
+   Ensure the service account still has Editor access to the Sheet.
 
 **App is slow**
-→ Streamlit Community Cloud free tier can be slow, especially when reading
-   from Google Sheets. Consider upgrading to Streamlit Teams if speed is important.
-   The `@st.cache_resource` on the connection helps but Sheet reads are still network calls.
+→ All data reads go to Google Sheets over the network. The `@st.cache_resource`
+   on the connection helps but cannot eliminate latency entirely. If speed
+   becomes a problem for 100+ students, consider upgrading to Streamlit Teams.
+
+**Student can't register — enrollment key rejected**
+→ Keys are case-insensitive. Check the key shown on the Instructor Overview tab.
+   If the Config tab was recently recreated, the key will have changed.
 
 ---
 
-## Part 6 — Security Notes
+## Part 7 — Security Notes
 
-- Passwords are stored as SHA-256 hashes — never in plain text
-- The instructor dashboard is hidden from students (not in the sidebar navigation)
-- Sessions expire after the browser tab is closed (Streamlit default)
-- The enrollment key prevents random people from creating accounts
-- The Google Sheet is accessible only via the service account credentials
+- Passwords are SHA-256 hashed — never stored in plain text
+- The instructor dashboard link is not shown in the sidebar navigation
+- 5 failed login attempts triggers a 5-minute lockout
+- The enrollment key prevents unauthorised account creation
+- `secrets.toml` must never be uploaded to GitHub
 
 ---
 
 ## Version History
 
-- **v1.0** — Initial release. Login system, Week 2 homework (Q3, Q9, Q10 T/F),
-  instructor dashboard with full management controls, plagiarism detection,
-  deadline system with grace period, worked examples (unlocks after 20 min),
-  dual timers, completion screen.
+- **v1.0** — Initial release
+- **v2.0 Phase 1** — Bug fixes, Dashboard improvements, FAQ, Course Materials,
+  question summary table, review mode, print to PDF, topics to revise,
+  extension workflow, individual access, gradebook export, preview mode,
+  auto-enable dates, plagiarism report download
