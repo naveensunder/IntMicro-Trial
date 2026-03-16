@@ -84,7 +84,7 @@ for cfg in sorted(hw_configs, key=lambda x: x.get("HW_ID","")):
     title     = cfg.get("Title", hw_id)
     enabled   = cfg.get("Enabled","FALSE").upper() == "TRUE"
     deadline  = cfg.get("Deadline","")
-    grace_min = int(cfg.get("Grace_Minutes", 15))
+    grace_min = int(cfg.get("Grace_Minutes") or 15)
     announce  = cfg.get("Announcement","")
     max_marks = cfg.get("Max_Marks","—")
 

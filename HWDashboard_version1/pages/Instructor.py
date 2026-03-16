@@ -212,7 +212,7 @@ with tabs[1]:
                         st.rerun()
 
             with c_gr:
-                new_gr = st.number_input("Grace (min)", value=int(grace),
+                new_gr = st.number_input("Grace (min)", value=int(grace or 15),
                                           min_value=0, max_value=120,
                                           key=f"gr_{hw_id}")
                 if str(new_gr) != str(grace):

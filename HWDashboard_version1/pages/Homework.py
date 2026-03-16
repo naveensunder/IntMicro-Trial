@@ -47,7 +47,7 @@ if not hw_cfg:
 
 title         = hw_cfg.get("Title", hw_id)
 deadline_str  = hw_cfg.get("Deadline", "2099-12-31 23:59")
-grace_minutes = int(hw_cfg.get("Grace_Minutes", 15))
+grace_minutes = int(hw_cfg.get("Grace_Minutes") or 15)
 announce      = hw_cfg.get("Announcement", "")
 instructions  = hw_cfg.get("Instructions", "")
 
