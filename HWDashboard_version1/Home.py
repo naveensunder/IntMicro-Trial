@@ -14,7 +14,7 @@ from db import (
 from ui import inject_css, COLORS
 
 st.set_page_config(
-    page_title="Learning Intermediate Microeconomics",
+    page_title="Intermediate Microeconomics",
     page_icon="📘",
     layout="centered",
     initial_sidebar_state="collapsed",
