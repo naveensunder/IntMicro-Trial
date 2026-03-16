@@ -14,7 +14,7 @@ from db import (
 from ui import inject_css, COLORS
 
 st.set_page_config(
-    page_title="Intermediate Microeconomics",
+    page_title="Learning Intermediate Microeconomics",
     page_icon="📘",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -97,7 +97,7 @@ _init()
 st.markdown("""
 <div class="login-logo">
   <div class="course-label">Interactive Homework Portal</div>
-  <div class="course-title">Learning Intermediate<br>Microeconomics</div>
+  <div class="course-title">Intermediate<br>Microeconomics</div>
   <div class="course-sub">Prof. Naveen Sunder</div>
 </div>
 <div class="mobile-warning">
