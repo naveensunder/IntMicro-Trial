@@ -29,11 +29,11 @@ st.markdown(f"""
     padding:0.95rem 1.2rem;text-align:center; }}
 .dash-metric-num {{ font-family:'DM Serif Display',serif;font-size:1.85rem;
     color:{COLORS['navy']};line-height:1; }}
-.dash-metric-lbl {{ font-size:0.68rem;color:{COLORS['neutral_500']};margin-top:0.25rem;
+.dash-metric-lbl {{ font-size:0.68rem;color:{COLORS['grey_text']};margin-top:0.25rem;
     font-weight:600;text-transform:uppercase;letter-spacing:0.07em; }}
 .sec {{ font-family:'DM Serif Display',serif;font-size:1rem;color:{COLORS['navy']};
     margin:1.4rem 0 0.6rem 0;padding-bottom:0.3rem;
-    border-bottom:1px solid {COLORS['neutral_200']}; }}
+    border-bottom:1px solid {COLORS['grey_mid']}; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,7 +43,7 @@ if not st.session_state.get("instructor_auth"):
         f'<div style="max-width:380px;margin:3rem auto;text-align:center;">'
         f'<div style="font-family:\'DM Serif Display\',serif;font-size:1.35rem;'
         f'color:{COLORS["navy"]};margin-bottom:0.35rem;">Instructor Access</div>'
-        f'<div style="font-size:0.81rem;color:{COLORS["neutral_500"]};'
+        f'<div style="font-size:0.81rem;color:{COLORS['grey_text']};'
         f'margin-bottom:1.4rem;">Learning Intermediate Microeconomics</div>'
         f'</div>',
         unsafe_allow_html=True
