@@ -1,6 +1,6 @@
 """
 Home.py — Login page.
-HWDashboard v4
+HWDashboard v5 — title: Intermediate Microeconomics
 """
 import streamlit as st
 import sys, os
@@ -15,7 +15,7 @@ from db import (
 from ui import inject_css, COLORS, page_footer
 
 st.set_page_config(
-    page_title="Learning Intermediate Microeconomics",
+    page_title="Intermediate Microeconomics",
     page_icon="📘",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -54,7 +54,7 @@ st.markdown("""
   📱 For the best experience, please use a laptop or desktop.
 </div>
 <div class="login-eye">Interactive Homework Portal</div>
-<div class="login-title">Learning Intermediate<br>Microeconomics</div>
+<div class="login-title">Intermediate<br>Microeconomics</div>
 <div class="login-sub">Prof. Naveen Sunder · Bentley University</div>
 """, unsafe_allow_html=True)
 
@@ -168,7 +168,7 @@ elif flow == "reset_pw":
             st.error("Password must be at least 8 characters.")
         elif rs_p1 != rs_p2:
             st.error("Passwords do not match.")
-        elif not get_student(rs_e.strip().lower()):
+        elif not get_student(rs_p1.strip().lower()):
             st.error("No account found with that email.")
         else:
             if update_password(rs_e.strip().lower(), rs_p1):
