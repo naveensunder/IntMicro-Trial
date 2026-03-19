@@ -83,14 +83,18 @@ if st.session_state.get("preview_mode"):
 
 # ── Progress line ──────────────────────────────────────────────────────────────
 summary = get_hw_summary(hw_id, email, submissions)
+summary = get_hw_summary(hw_id, email, submissions)
+score_so_far = (
+    " · Score so far: <strong>" + str(summary["total_score"]) + " / " + str(summary["total_max"]) + "</strong>"
+    if summary["n_submitted"] > 0 else ""
+)
 st.markdown(
-    f'<div class="progress-line">'
+    '<div class="progress-line">'
     f'<strong>{summary["n_submitted"]} of {summary["n_total"]}</strong> questions submitted'
-    f'{f" · Score so far: <strong>{summary[\'total_score\']} / {summary[\'total_max\']}</strong>" if summary["n_submitted"] > 0 else ""}'
-    f'</div>',
+    + score_so_far +
+    '</div>',
     unsafe_allow_html=True
 )
-
 # ── Question overview rows ─────────────────────────────────────────────────────
 hw_subs   = submissions.get(hw_id, {}) if isinstance(submissions, dict) else {}
 questions = ALL_HW_CONFIGS.get(hw_id, {}).get("questions", [])
