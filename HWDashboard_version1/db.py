@@ -87,7 +87,7 @@ def init_sheets():
             "This homework covers budget constraints, optimal bundles, "
             "and utility maximisation with different preference types."
         ]])
-        ws.update("A100", [AUDIT_HEADER])
+        ws.update("A30", [AUDIT_HEADER])
     else:
         # Repair if empty
         ws   = sh.worksheet(TAB_CONFIG)
@@ -109,10 +109,10 @@ def init_sheets():
                 "TRUE", "2027-04-30 23:59", "15", "", "18",
                 "This homework covers budget constraints and utility maximisation."
             ]])
-        has_audit = any(len(r)>0 and r[0]=="Timestamp" and i>50
+        has_audit = any(len(r)>0 and r[0]=="Timestamp" and i>20
                         for i,r in enumerate(rows))
         if not has_audit:
-            ws.update("A100", [AUDIT_HEADER])
+            ws.update("A30", [AUDIT_HEADER])
 
 
 # ── Passwords ──────────────────────────────────────────────────────────────────
@@ -378,7 +378,7 @@ def log_audit(actor: str, action: str, detail: str=""):
         ws   = get_tab(TAB_CONFIG)
         rows = ws.get_all_values()
         start = next((i for i,r in enumerate(rows)
-                      if len(r)>0 and r[0]=="Timestamp" and i>50), None)
+                      if len(r)>0 and r[0]=="Timestamp" and i>20), None)
         if start is None:
             return
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

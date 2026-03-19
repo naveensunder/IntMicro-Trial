@@ -143,8 +143,7 @@ if not rendered:
     st.info("No questions found for this assignment.")
 else:
     for i, q_cfg in enumerate(rendered):
-        if i > 0:
-            q_divider(q_cfg["title"])
+        q_divider(q_cfg["title"])
         render_question(q_cfg, hw_id, email, past_hard, grace_active, submissions)
 
 # ── Completion ─────────────────────────────────────────────────────────────────

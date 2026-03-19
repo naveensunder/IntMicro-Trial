@@ -389,7 +389,7 @@ with tabs[3]:
         ws   = get_tab("Config")
         vals = ws.get_all_values()
         a_start = next((i for i,r in enumerate(vals)
-                        if len(r)>0 and r[0]=="Timestamp" and i>50), None)
+                        if len(r)>0 and r[0]=="Timestamp" and i>20), None)
         if a_start is not None:
             data = vals[a_start+1:]
             if data:
