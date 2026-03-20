@@ -51,7 +51,7 @@ with col_h:
 
 # ── Semester score ─────────────────────────────────────────────────────────────
 total_earned = 0; total_max = 0
-for cfg in hw_configs:
+for cfg in sorted(hw_configs, key=lambda x: _dash_week_num(x.get('HW_ID',''))):
     if cfg.get("Enabled","").upper() != "TRUE": continue
     s = get_hw_summary(cfg["HW_ID"], email, submissions)
     total_earned += s["total_score"]; total_max += s["total_max"]
@@ -93,6 +93,12 @@ PLACEHOLDERS = [
     {"HW_ID": "HW_WEEK3", "Title": "Week 3 — Consumer Preferences",         "Week": 3},
     {"HW_ID": "HW_WEEK4", "Title": "Week 4 — Utility Maximisation",         "Week": 4},
 ]
+
+# ── Week number helper ───────────────────────────────────────────────────────
+def _dash_week_num(hw_id: str) -> int:
+    import re as _re
+    m = _re.search(r"(\d+)", hw_id)
+    return int(m.group(1)) if m else 999
 
 # ── Classify and sort assignments ──────────────────────────────────────────────
 open_hws    = []
@@ -236,7 +242,7 @@ st.markdown(
 )
 for cfg in upcoming_hws:
     render_hw_card(cfg, is_open=False)
-for p in PLACEHOLDERS:
+for p in sorted(PLACEHOLDERS, key=lambda x: x.get('Week', 99)):
     # Only show placeholder if not already in hw_configs
     existing_ids = [c.get("HW_ID","") for c in hw_configs]
     if p["HW_ID"] not in existing_ids:
