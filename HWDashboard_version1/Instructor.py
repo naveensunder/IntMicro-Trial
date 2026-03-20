@@ -301,7 +301,8 @@ with tabs[1]:
     # ── Smart Add Assignment ───────────────────────────────────────────────────
     st.markdown('<div class="sec">Add New Assignment</div>', unsafe_allow_html=True)
 
-    # Find homeworks in engine not yet registered in Sheet
+    import re as _re
+
     available_to_add = sorted(
         [hw_id for hw_id in engine_ids if hw_id not in registered_ids],
         key=_week_num
@@ -310,80 +311,100 @@ with tabs[1]:
     if not available_to_add:
         st.info("All homeworks in question_engine.py are already registered.")
     else:
-        with st.expander("Add assignment"):
-            st.caption(
-                "Only homeworks defined in question_engine.py are shown. "
-                "Max marks and title are auto-populated.")
+        # Step 1 — Select homework
+        sel_hw = st.selectbox(
+            "Select homework to add:",
+            options=["— select —"] + available_to_add,
+            key="sel_hw_add"
+        )
 
-            sel_hw = st.selectbox(
-                "Select homework to add",
-                options=available_to_add,
-                key="sel_hw_add")
-
-            # Auto-populate from ALL_HW_CONFIGS
-            hw_data   = ALL_HW_CONFIGS.get(sel_hw, {})
-            auto_marks = sum(q.get("marks",0) for q in hw_data.get("questions",[]))
-            # Build default title from hw_id e.g. HW_WEEK1 -> Week 1
-            import re as _re
+        if sel_hw and sel_hw != "— select —":
+            # Auto-populate values
+            hw_data    = ALL_HW_CONFIGS.get(sel_hw, {})
+            auto_marks = sum(q.get("marks", 0) for q in hw_data.get("questions", []))
             week_match = _re.search(r"WEEK(\d+)", sel_hw)
             auto_title = f"Week {week_match.group(1)}" if week_match else sel_hw
+            default_dl = datetime.date.today() + datetime.timedelta(days=14)
 
-            n_title = st.text_input("Title (auto-populated, edit if needed)",
-                                    value=auto_title, key="n_title")
-            n_en    = st.toggle("Enable immediately", key="n_en", value=False)
-            n_dl    = st.date_input("Deadline date", key="n_dl",
-                                    value=datetime.date.today() + datetime.timedelta(days=14))
-            n_tm    = st.time_input("Deadline time", key="n_tm",
-                                    value=datetime.time(23,59))
-            n_gr    = st.number_input("Grace period (minutes)", value=15,
-                                      min_value=0, max_value=120, key="n_gr")
             st.markdown(
-                f'<div class="banner banner-info">Max marks auto-set to <strong>{auto_marks}</strong> based on question_engine.py question totals.</div>',
+                f'<div class="banner banner-info">'
+                f'<strong>{sel_hw}</strong> — {len(hw_data.get("questions",[]))} questions · '
+                f'<strong>{auto_marks} marks</strong> total · '
+                f'Title will be set to: <strong>{auto_title}</strong></div>',
                 unsafe_allow_html=True)
-            n_in = st.text_area("Instructions (optional)", key="n_in", height=60)
-            char_c = len(n_in)
-            st.caption(f"{char_c} / 500 characters")
 
-            if st.button("Add Assignment", key="add_hw"):
-                # Validate before writing to Sheet
-                errors = []
+            # Step 2 — Three required fields only
+            st.markdown("**Set deadline:**")
+            col_d, col_t = st.columns(2)
+            with col_d:
+                n_dl = st.date_input("Deadline date", value=default_dl, key="n_dl")
+            with col_t:
+                n_tm = st.time_input("Deadline time",
+                                     value=datetime.time(23, 59), key="n_tm")
+
+            n_en = st.toggle("Enable immediately for students", value=False, key="n_en")
+
+            # Step 3 — Advanced options (collapsed by default)
+            with st.expander("Advanced options (grace period, title, instructions)"):
+                n_title = st.text_input("Title", value=auto_title, key="n_title")
+                n_gr    = st.number_input("Grace period (minutes)",
+                                          value=15, min_value=0,
+                                          max_value=120, key="n_gr")
+                n_in    = st.text_area("Instructions (shown to students before they start)",
+                                       key="n_in", height=70)
+                st.caption(f"{len(n_in)} / 500 characters")
+            
+            # Read back advanced values (use defaults if expander not opened)
+            final_title = st.session_state.get("n_title", auto_title) or auto_title
+            final_gr    = st.session_state.get("n_gr", 15) or 15
+            final_in    = st.session_state.get("n_in", "") or ""
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Add Assignment", key="add_hw", use_container_width=True):
                 dl_str = f"{n_dl.strftime('%Y-%m-%d')} {n_tm.strftime('%H:%M')}"
                 dl_dt  = datetime.datetime.strptime(dl_str, "%Y-%m-%d %H:%M")
 
-                if not n_title.strip():
+                # Validate
+                errors = []
+                if not final_title.strip():
                     errors.append("Title cannot be empty.")
-                if n_gr < 0 or n_gr > 120:
-                    errors.append("Grace period must be between 0 and 120 minutes.")
-                if len(n_in) > 500:
-                    errors.append(f"Instructions are too long ({len(n_in)} chars). Maximum is 500.")
+                if len(final_in) > 500:
+                    errors.append(
+                        f"Instructions too long ({len(final_in)} chars). Maximum 500.")
                 if dl_dt < datetime.datetime.now() and not n_en:
                     errors.append(
                         f"Deadline {dl_str} is in the past. "
-                        f"Either set a future deadline or enable the homework now.")
+                        f"Set a future deadline, or enable the homework now so students "
+                        f"can see it (it will immediately show as closed).")
 
                 if errors:
                     for e in errors:
                         st.error(e)
                 else:
-                    # Past deadline warning (not blocking)
                     if dl_dt < datetime.datetime.now():
                         st.warning(
-                            f"⚠ Deadline {dl_str} is in the past. "
-                            f"This homework will open but immediately close.")
+                            f"⚠ Deadline {dl_str} is in the past — "
+                            f"this homework will show as closed immediately.")
 
                     ok = add_hw_config(
-                        sel_hw, n_title.strip(),
+                        sel_hw, final_title.strip(),
                         str(n_en).upper(), dl_str,
-                        n_gr, "", auto_marks, n_in.strip())
+                        final_gr, "", auto_marks, final_in.strip())
+
                     if ok:
-                        log_audit("instructor","HW_ADDED",f"{sel_hw}: {n_title}")
-                        st.success(f"✓ {sel_hw} added successfully with {auto_marks} marks.")
+                        log_audit("instructor", "HW_ADDED",
+                                  f"{sel_hw}: {final_title}")
+                        st.success(
+                            f"✓ {sel_hw} added — {auto_marks} marks · "
+                            f"Deadline: {dl_str} · "
+                            f"{'Enabled' if n_en else 'Disabled (enable when ready)'}")
                         st.rerun()
                     else:
                         st.error(
                             "Failed to write to Google Sheet. "
-                            "Check that the Config tab exists and the service account "
-                            "has Editor access to the Sheet.")
+                            "Possible causes: Config tab missing, service account "
+                            "does not have Editor access, or corrupted rows in Config tab. "
+                            "Check the Sheet and try again.")
 
 # ════════════════════════════════════════════════════════════════════════════════
 with tabs[2]:
