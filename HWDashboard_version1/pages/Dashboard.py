@@ -8,9 +8,16 @@ import datetime
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from db import get_homework_configs, get_student_submissions, parse_deadline
+import re as _re_dash
+from db import get_homework_configs, get_student_submissions, parse_deadline, check_auto_enable
 from ui import inject_css, page_header, COLORS, banner, page_footer
 from question_engine import get_hw_summary
+
+
+def _dash_week_num(hw_id: str) -> int:
+    """Returns week number from homework ID for chronological sorting."""
+    m = _re_dash.search(r"(\d+)", hw_id)
+    return int(m.group(1)) if m else 999
 
 st.set_page_config(
     page_title="Dashboard — Microeconomics",
@@ -37,6 +44,12 @@ with col_r:
         st.session_state["submissions"] = get_student_submissions(email)
         st.session_state["hw_configs"]  = get_homework_configs()
         st.rerun()
+
+# Auto-enable any homeworks whose date has passed
+try:
+    check_auto_enable()
+except Exception:
+    pass
 
 submissions = st.session_state.get("submissions", {})
 hw_configs  = st.session_state.get("hw_configs",  [])
@@ -93,12 +106,6 @@ PLACEHOLDERS = [
     {"HW_ID": "HW_WEEK3", "Title": "Week 3 — Consumer Preferences",         "Week": 3},
     {"HW_ID": "HW_WEEK4", "Title": "Week 4 — Utility Maximisation",         "Week": 4},
 ]
-
-# ── Week number helper ───────────────────────────────────────────────────────
-def _dash_week_num(hw_id: str) -> int:
-    import re as _re
-    m = _re.search(r"(\d+)", hw_id)
-    return int(m.group(1)) if m else 999
 
 # ── Classify and sort assignments ──────────────────────────────────────────────
 open_hws    = []

@@ -15,7 +15,7 @@ from db import (
     get_homework_configs, update_hw_config, add_hw_config,
     get_all_submissions, get_enrollment_key, log_audit,
     get_tab, TAB_REGISTRY, bulk_register, verify_pw, hash_pw,
-    get_student_submissions,
+    get_student_submissions, check_auto_enable,
 )
 from ui import inject_css, page_header, COLORS
 
@@ -88,6 +88,12 @@ page_header(
     "Instructor Dashboard",
     datetime.datetime.now().strftime("%d %b %Y, %H:%M")
 )
+
+# Check and apply any auto-enable dates that have passed
+try:
+    check_auto_enable()
+except Exception:
+    pass
 
 tabs = st.tabs(["📊 Overview", "📚 Homework", "👥 Students", "⚙️ Settings"])
 
@@ -390,12 +396,26 @@ with tabs[1]:
                 value=False, key="n_en"
             )
 
-            with st.expander("Advanced options (title, grace period, instructions)"):
+            with st.expander("Advanced options (title, grace period, auto-enable, instructions)"):
                 n_title = st.text_input(
                     "Title", value=auto_title, key="n_title")
                 n_gr = st.number_input(
                     "Grace period (minutes)",
                     value=15, min_value=0, max_value=120, key="n_gr")
+                st.markdown(
+                    "**Auto-enable date** (optional) — leave blank to enable manually:")
+                col_ae_d, col_ae_t, col_ae_clr = st.columns([2, 2, 1])
+                with col_ae_d:
+                    n_ae_date = st.date_input(
+                        "Auto-enable date",
+                        value=None, key="n_ae_date")
+                with col_ae_t:
+                    n_ae_time = st.time_input(
+                        "Auto-enable time",
+                        value=datetime.time(0, 0), key="n_ae_time")
+                with col_ae_clr:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    clear_ae = st.checkbox("Clear", key="clear_ae")
                 n_in = st.text_area(
                     "Instructions (optional)",
                     key="n_in", height=70)
@@ -409,9 +429,16 @@ with tabs[1]:
                           f"{n_tm.strftime('%H:%M')}")
                 dl_dt  = datetime.datetime.strptime(dl_str, "%Y-%m-%d %H:%M")
 
-                f_title = st.session_state.get("n_title", auto_title) or auto_title
-                f_gr    = st.session_state.get("n_gr", 15) or 15
-                f_in    = st.session_state.get("n_in", "") or ""
+                f_title   = st.session_state.get("n_title", auto_title) or auto_title
+                f_gr      = st.session_state.get("n_gr", 15) or 15
+                f_in      = st.session_state.get("n_in", "") or ""
+                ae_d      = st.session_state.get("n_ae_date", None)
+                ae_t      = st.session_state.get("n_ae_time", datetime.time(0,0))
+                clear_ae  = st.session_state.get("clear_ae", False)
+                if ae_d and not clear_ae:
+                    f_ae = f"{ae_d.strftime('%Y-%m-%d')} {ae_t.strftime('%H:%M')}"
+                else:
+                    f_ae = ""
 
                 errors = []
                 if not f_title.strip():
@@ -438,16 +465,19 @@ with tabs[1]:
                     ok = add_hw_config(
                         sel, f_title.strip(),
                         str(n_en).upper(), dl_str,
-                        f_gr, "", auto_marks, f_in.strip()
+                        f_gr, "", auto_marks, f_in.strip(),
+                        f_ae
                     )
 
                     if ok:
                         log_audit("instructor", "HW_ADDED",
                                   f"{sel}: {f_title}")
+                        ae_note = f" · Auto-enables: {f_ae}" if f_ae else ""
                         st.success(
                             f"✓ {sel} added — {auto_marks} marks · "
                             f"Deadline: {dl_str} · "
                             f"{'Enabled' if n_en else 'Disabled (enable when ready)'}"
+                            f"{ae_note}"
                         )
                         st.rerun()
                     else:
