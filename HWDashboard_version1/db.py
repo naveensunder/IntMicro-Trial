@@ -23,7 +23,8 @@ SUBMISSIONS_HEADER = ["Timestamp","Email","Homework_ID","Question_ID",
                        "Question_Type","Status","Is_Late","Raw_Answer",
                        "Score","Max_Score","Correct_Answer"]
 HW_CONFIG_HEADER   = ["HW_ID","Title","Enabled","Deadline",
-                       "Grace_Minutes","Announcement","Max_Marks","Instructions"]
+                       "Grace_Minutes","Announcement","Max_Marks","Instructions",
+                       "Auto_Enable_Date"]
 AUDIT_HEADER       = ["Timestamp","Actor","Action","Detail"]
 
 
@@ -300,7 +301,8 @@ def update_hw_config(hw_id: str, field: str, value: str) -> bool:
 
 
 def add_hw_config(hw_id, title, enabled, deadline,
-                  grace, announcement, max_marks, instructions) -> bool:
+                  grace, announcement, max_marks, instructions,
+                  auto_enable_date="") -> bool:
     try:
         ws   = get_tab(TAB_CONFIG)
         rows = ws.get_all_values()
@@ -314,7 +316,8 @@ def add_hw_config(hw_id, title, enabled, deadline,
                 insert = i+1; break
             insert = i+2
         ws.insert_row([hw_id, title, str(enabled), deadline,
-                       str(grace), announcement, str(max_marks), instructions],
+                       str(grace), announcement, str(max_marks), instructions,
+                       auto_enable_date],
                       insert)
         return True
     except Exception:
@@ -370,6 +373,27 @@ def verify_instructor(pw: str) -> bool:
 def update_instructor_password(new_pw: str) -> bool:
     _set_config("instructor_password_hash", hash_pw(new_pw))
     return True
+
+
+# ── Auto-enable check ─────────────────────────────────────────────────────────
+def check_auto_enable():
+    """Enable homeworks whose Auto_Enable_Date has passed. Run on app load."""
+    try:
+        configs = get_homework_configs()
+        now     = datetime.datetime.now()
+        for cfg in configs:
+            auto_date = cfg.get("Auto_Enable_Date", "").strip()
+            enabled   = cfg.get("Enabled", "").upper() == "TRUE"
+            if auto_date and not enabled:
+                try:
+                    ae_dt = datetime.datetime.strptime(auto_date, "%Y-%m-%d %H:%M")
+                    if now >= ae_dt:
+                        update_hw_config(cfg["HW_ID"], "Enabled", "TRUE")
+                        log_audit("system", "AUTO_ENABLED", cfg["HW_ID"])
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 # ── Audit ──────────────────────────────────────────────────────────────────────

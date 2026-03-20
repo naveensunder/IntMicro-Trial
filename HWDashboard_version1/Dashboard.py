@@ -8,9 +8,16 @@ import datetime
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from db import get_homework_configs, get_student_submissions, parse_deadline
+import re as _re_dash
+from db import get_homework_configs, get_student_submissions, parse_deadline, check_auto_enable
 from ui import inject_css, page_header, COLORS, banner, page_footer
 from question_engine import get_hw_summary
+
+
+def _dash_week_num(hw_id: str) -> int:
+    """Returns week number from homework ID for chronological sorting."""
+    m = _re_dash.search(r"(\d+)", hw_id)
+    return int(m.group(1)) if m else 999
 
 st.set_page_config(
     page_title="Dashboard — Microeconomics",
@@ -38,6 +45,12 @@ with col_r:
         st.session_state["hw_configs"]  = get_homework_configs()
         st.rerun()
 
+# Auto-enable any homeworks whose date has passed
+try:
+    check_auto_enable()
+except Exception:
+    pass
+
 submissions = st.session_state.get("submissions", {})
 hw_configs  = st.session_state.get("hw_configs",  [])
 
@@ -51,16 +64,7 @@ with col_h:
 
 # ── Semester score ─────────────────────────────────────────────────────────────
 total_earned = 0; total_max = 0
-# Sort all configs chronologically by week number before classifying
-import re as _re_dash
-
-def _dash_week_num(hw_id: str) -> int:
-    m = _re_dash.search(r"(\d+)", hw_id)
-    return int(m.group(1)) if m else 999
-
-hw_configs_sorted = sorted(hw_configs, key=lambda x: _dash_week_num(x.get("HW_ID","")))
-
-for cfg in hw_configs_sorted:
+for cfg in sorted(hw_configs, key=lambda x: _dash_week_num(x.get('HW_ID',''))):
     if cfg.get("Enabled","").upper() != "TRUE": continue
     s = get_hw_summary(cfg["HW_ID"], email, submissions)
     total_earned += s["total_score"]; total_max += s["total_max"]
@@ -77,16 +81,7 @@ if total_max > 0:
 
 # ── 48-hour warning ────────────────────────────────────────────────────────────
 now = datetime.datetime.now()
-# Sort all configs chronologically by week number before classifying
-import re as _re_dash
-
-def _dash_week_num(hw_id: str) -> int:
-    m = _re_dash.search(r"(\d+)", hw_id)
-    return int(m.group(1)) if m else 999
-
-hw_configs_sorted = sorted(hw_configs, key=lambda x: _dash_week_num(x.get("HW_ID","")))
-
-for cfg in hw_configs_sorted:
+for cfg in hw_configs:
     if cfg.get("Enabled","").upper() != "TRUE": continue
     hw_id    = cfg.get("HW_ID","")
     deadline = cfg.get("Deadline","")
@@ -117,16 +112,7 @@ open_hws    = []
 upcoming_hws = []
 closed_hws  = []
 
-# Sort all configs chronologically by week number before classifying
-import re as _re_dash
-
-def _dash_week_num(hw_id: str) -> int:
-    m = _re_dash.search(r"(\d+)", hw_id)
-    return int(m.group(1)) if m else 999
-
-hw_configs_sorted = sorted(hw_configs, key=lambda x: _dash_week_num(x.get("HW_ID","")))
-
-for cfg in hw_configs_sorted:
+for cfg in hw_configs:
     hw_id    = cfg.get("HW_ID","")
     enabled  = cfg.get("Enabled","FALSE").upper() == "TRUE"
     deadline = cfg.get("Deadline","")
@@ -263,7 +249,7 @@ st.markdown(
 )
 for cfg in upcoming_hws:
     render_hw_card(cfg, is_open=False)
-for p in sorted(PLACEHOLDERS, key=lambda x: x.get("Week", 99)):
+for p in sorted(PLACEHOLDERS, key=lambda x: x.get('Week', 99)):
     # Only show placeholder if not already in hw_configs
     existing_ids = [c.get("HW_ID","") for c in hw_configs]
     if p["HW_ID"] not in existing_ids:
