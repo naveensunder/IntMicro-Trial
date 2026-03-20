@@ -303,22 +303,41 @@ def update_hw_config(hw_id: str, field: str, value: str) -> bool:
 def add_hw_config(hw_id, title, enabled, deadline,
                   grace, announcement, max_marks, instructions,
                   auto_enable_date="") -> bool:
+    """
+    Add a new homework config row directly after the last existing HW entry.
+    Uses update() to write to a specific cell rather than insert_row(),
+    which avoids push-down side effects on the audit section.
+    """
     try:
         ws   = get_tab(TAB_CONFIG)
         rows = ws.get_all_values()
-        start = next((i for i,r in enumerate(rows)
-                      if len(r)>0 and r[0]=="HW_ID"), None)
+
+        # Find the HW_ID header row
+        start = next((i for i, r in enumerate(rows)
+                      if len(r) > 0 and r[0] == "HW_ID"), None)
         if start is None:
             return False
-        insert = start+2
-        for i,r in enumerate(rows[start+1:], start=start+1):
-            if not r or not r[0] or r[0] in ["Key","Timestamp","Email"]:
-                insert = i+1; break
-            insert = i+2
-        ws.insert_row([hw_id, title, str(enabled), deadline,
-                       str(grace), announcement, str(max_marks), instructions,
-                       auto_enable_date],
-                      insert)
+
+        # Find the last HW data row — scan forward until we hit an empty
+        # row or a non-HW row (e.g. Timestamp audit header)
+        last_hw_row = start  # 0-indexed; start is the header row
+        for i, r in enumerate(rows[start + 1:], start=start + 1):
+            # Stop at empty row or at the audit section header
+            if not r or not r[0].strip() or r[0].strip() in ["Timestamp", "Key"]:
+                break
+            last_hw_row = i
+
+        # Write new row immediately after the last HW row (1-indexed for Sheets)
+        target_row = last_hw_row + 2  # +1 for 0->1 index, +1 to go after last
+        new_row = [
+            hw_id, title, str(enabled), deadline,
+            str(grace), announcement, str(max_marks),
+            instructions, auto_enable_date
+        ]
+        # Pad to match sheet width
+        col_letter = chr(ord('A') + len(new_row) - 1)
+        cell_range = f"A{target_row}:{col_letter}{target_row}"
+        ws.update(cell_range, [new_row])
         return True
     except Exception:
         return False
