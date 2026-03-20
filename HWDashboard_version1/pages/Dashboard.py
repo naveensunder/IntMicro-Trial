@@ -120,7 +120,17 @@ for cfg in hw_configs:
     past_hard, past_soft, dl_dt, dl_grace = parse_deadline(deadline, grace)
     summary  = get_hw_summary(hw_id, email, submissions)
 
-    if enabled and not past_hard:
+    # Check opening date — if set and in future, treat as upcoming
+    opening    = cfg.get("Opening_Date", "").strip()
+    open_yet   = True
+    if opening:
+        try:
+            op_dt    = datetime.datetime.strptime(opening, "%Y-%m-%d %H:%M")
+            open_yet = datetime.datetime.now() >= op_dt
+        except Exception:
+            open_yet = True
+
+    if enabled and not past_hard and open_yet:
         open_hws.append(cfg)
     elif past_hard:
         closed_hws.append(cfg)
@@ -144,12 +154,17 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
 
     # Deadline string — natural language format
     try:
-        dl_str = dl_dt.strftime("%A, %d %B %Y at %I:%M %p")
-        rem    = dl_grace - now
-        urgent = (not past_hard and rem.total_seconds() < 24*3600
-                  and rem.total_seconds() > 0)
+        is_placeholder = dl_dt.year == 2099
+        if is_placeholder:
+            dl_str = "Deadline to be announced"
+            urgent = False
+        else:
+            dl_str = dl_dt.strftime("%A, %d %B %Y at %I:%M %p")
+            rem    = dl_grace - now
+            urgent = (not past_hard and rem.total_seconds() < 24*3600
+                      and rem.total_seconds() > 0)
     except Exception:
-        dl_str = deadline; urgent = False
+        dl_str = deadline; urgent = False; is_placeholder = False
 
     if is_placeholder:
         st.markdown(

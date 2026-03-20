@@ -24,7 +24,7 @@ SUBMISSIONS_HEADER = ["Timestamp","Email","Homework_ID","Question_ID",
                        "Score","Max_Score","Correct_Answer"]
 HW_CONFIG_HEADER   = ["HW_ID","Title","Enabled","Deadline",
                        "Grace_Minutes","Announcement","Max_Marks","Instructions",
-                       "Auto_Enable_Date"]
+                       "Opening_Date"]
 AUDIT_HEADER       = ["Timestamp","Actor","Action","Detail"]
 
 
@@ -302,19 +302,18 @@ def update_hw_config(hw_id: str, field: str, value: str) -> bool:
 
 def add_hw_config(hw_id, title, enabled, deadline,
                   grace, announcement, max_marks, instructions,
-                  auto_enable_date="") -> tuple:
+                  opening_date="") -> tuple:
     """
     Add a new homework config row.
     Returns (True, "") on success or (False, error_message) on failure.
-    Uses the simplest possible append_row() call — same pattern as
-    write_submission() which works reliably.
+    Uses append_row() — most reliable gspread method.
     """
     try:
         ws = get_tab(TAB_CONFIG)
         ws.append_row(
             [hw_id, title, str(enabled), deadline,
              str(grace), announcement, str(max_marks),
-             instructions, auto_enable_date]
+             instructions, opening_date]
         )
         return True, ""
     except Exception as e:
@@ -372,6 +371,34 @@ def update_instructor_password(new_pw: str) -> bool:
     return True
 
 
+# ── Auto-register homeworks from question_engine ──────────────────────────────
+def auto_register_homeworks(all_hw_configs: dict):
+    """
+    Register any homeworks in question_engine.ALL_HW_CONFIGS that are not
+    yet in the Sheet. Runs on app load. Only writes new rows — never
+    overwrites existing ones. Defaults: disabled, far-future deadline,
+    blank opening date.
+    """
+    try:
+        existing = {c.get("HW_ID","") for c in get_homework_configs()}
+        for hw_id, hw_data in all_hw_configs.items():
+            if hw_id in existing:
+                continue
+            # Auto-generate title from ID e.g. HW_WEEK1 -> Week 1
+            import re as _re
+            wm    = _re.search(r"WEEK(\d+)", hw_id)
+            title = f"Week {wm.group(1)}" if wm else hw_id
+            marks = sum(q.get("marks",0) for q in hw_data.get("questions",[]))
+            add_hw_config(
+                hw_id, title, "FALSE",
+                "2099-12-31 23:59",  # placeholder deadline
+                "15", "", marks, "",
+                ""                   # blank opening date
+            )
+    except Exception:
+        pass
+
+
 # ── Auto-enable check ─────────────────────────────────────────────────────────
 def check_auto_enable():
     """Enable homeworks whose Auto_Enable_Date has passed. Run on app load."""
@@ -379,7 +406,7 @@ def check_auto_enable():
         configs = get_homework_configs()
         now     = datetime.datetime.now()
         for cfg in configs:
-            auto_date = cfg.get("Auto_Enable_Date", "").strip()
+            auto_date = cfg.get("Opening_Date", "").strip()
             enabled   = cfg.get("Enabled", "").upper() == "TRUE"
             if auto_date and not enabled:
                 try:
