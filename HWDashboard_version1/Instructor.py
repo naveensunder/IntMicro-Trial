@@ -462,7 +462,7 @@ with tabs[1]:
                             f"⚠ Deadline {dl_str} is in the past — "
                             f"homework will show as closed immediately.")
 
-                    ok = add_hw_config(
+                    ok, err = add_hw_config(
                         sel, f_title.strip(),
                         str(n_en).upper(), dl_str,
                         f_gr, "", auto_marks, f_in.strip(),
@@ -482,11 +482,8 @@ with tabs[1]:
                         st.rerun()
                     else:
                         st.error(
-                            "Failed to write to Google Sheet. "
-                            "Possible causes: corrupted rows in Config tab, "
-                            "missing HW_ID header at row 10, or service account "
-                            "does not have Editor access. "
-                            "Clean the Config tab and try again."
+                            f"Failed to write to Google Sheet. "
+                            f"Exact error: {err}"
                         )
 
 

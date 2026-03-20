@@ -302,25 +302,23 @@ def update_hw_config(hw_id: str, field: str, value: str) -> bool:
 
 def add_hw_config(hw_id, title, enabled, deadline,
                   grace, announcement, max_marks, instructions,
-                  auto_enable_date="") -> bool:
+                  auto_enable_date="") -> tuple:
     """
-    Add a new homework config row using append_row() — the most reliable
-    gspread method. No position calculation, no insert_row() fragility,
-    no range string needed. Works identically across all gspread versions.
+    Add a new homework config row.
+    Returns (True, "") on success or (False, error_message) on failure.
+    Uses the simplest possible append_row() call — same pattern as
+    write_submission() which works reliably.
     """
     try:
         ws = get_tab(TAB_CONFIG)
         ws.append_row(
             [hw_id, title, str(enabled), deadline,
              str(grace), announcement, str(max_marks),
-             instructions, auto_enable_date],
-            value_input_option="RAW",
-            insert_data_option="INSERT_ROWS",
-            table_range="A10"
+             instructions, auto_enable_date]
         )
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:200]
 
 
 # ── Submissions ────────────────────────────────────────────────────────────────
