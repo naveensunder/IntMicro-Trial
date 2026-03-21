@@ -168,7 +168,7 @@ elif flow == "reset_pw":
             st.error("Password must be at least 8 characters.")
         elif rs_p1 != rs_p2:
             st.error("Passwords do not match.")
-        elif not get_student(rs_p1.strip().lower()):
+        elif not get_student(rs_e.strip().lower()):
             st.error("No account found with that email.")
         else:
             if update_password(rs_e.strip().lower(), rs_p1):

@@ -16,7 +16,7 @@ from db import (
     get_all_submissions, get_enrollment_key, log_audit,
     get_tab, TAB_REGISTRY, bulk_register,
     get_student_submissions, check_auto_enable,
-    auto_register_homeworks,
+    auto_register_homeworks, generate_gradebook_sheet,
 )
 from ui import inject_css, page_header, COLORS
 
@@ -68,12 +68,27 @@ if not st.session_state.get("instructor_auth"):
     with col:
         pwd = st.text_input("Password", type="password", key="inst_pw")
         if st.button("Sign In", use_container_width=True, key="inst_in"):
-            if verify_instructor(pwd):
-                st.session_state["instructor_auth"] = True
+            # Brute force protection — same pattern as student login
+            inst_attempts = st.session_state.get("inst_login_attempts", 0)
+            inst_lockout  = st.session_state.get("inst_lockout_until", None)
+            if inst_lockout and datetime.datetime.now() < inst_lockout:
+                secs = int((inst_lockout - datetime.datetime.now()).total_seconds())
+                st.error(f"Too many failed attempts. Please wait {secs} seconds.")
+            elif verify_instructor(pwd):
+                st.session_state["instructor_auth"]      = True
+                st.session_state["inst_login_attempts"]  = 0
+                st.session_state.pop("inst_lockout_until", None)
                 log_audit("instructor", "LOGIN", "")
                 st.rerun()
             else:
-                st.error("Incorrect password.")
+                inst_attempts += 1
+                st.session_state["inst_login_attempts"] = inst_attempts
+                if inst_attempts >= 5:
+                    st.session_state["inst_lockout_until"] = (
+                        datetime.datetime.now() + datetime.timedelta(minutes=5))
+                    st.error("Too many failed attempts. Locked for 5 minutes.")
+                else:
+                    st.error(f"Incorrect password. {5 - inst_attempts} attempts remaining.")
     st.markdown(
         '<div style="max-width:380px;margin:1rem auto;">'
         '<div class="banner banner-warning" style="font-size:0.85rem;">'
@@ -197,6 +212,22 @@ with tabs[0]:
                                "gradebook.csv", "text/csv", key="dl_gb")
         else:
             st.info("No submissions yet.")
+
+    st.markdown('<div class="sec">Gradebook Sheet</div>', unsafe_allow_html=True)
+    st.caption(
+        "Generate a Gradebook tab in your Google Sheet with one row per student "
+        "and one column per homework. Updates every time you click.")
+    if st.button("Generate / Update Gradebook Sheet", key="gen_gb",
+                 use_container_width=True):
+        with st.spinner("Generating gradebook..."):
+            ok, result = generate_gradebook_sheet(ALL_HW_CONFIGS)
+        if ok:
+            log_audit("instructor", "GRADEBOOK_GENERATED", f"{result} students")
+            st.success(
+                f"✓ Gradebook updated — {result} students · "
+                f"Check the 'Gradebook' tab in your Google Sheet.")
+        else:
+            st.error(f"Failed to generate gradebook: {result}")
 
 
 # ════════════════════════════════════════════════════════════════════════════════

@@ -55,7 +55,10 @@ submissions  = st.session_state.get("submissions", {})
 
 # Natural language deadline
 try:
-    dl_display = dl_dt.strftime("%A, %d %B %Y at %I:%M %p")
+    if dl_dt.year == 2099:
+        dl_display = "Deadline to be announced"
+    else:
+        dl_display = dl_dt.strftime("%A, %d %B %Y at %I:%M %p")
 except Exception:
     dl_display = deadline_str
 
@@ -82,7 +85,6 @@ if st.session_state.get("preview_mode"):
     banner("👁 Instructor preview mode.", "info")
 
 # ── Progress line ──────────────────────────────────────────────────────────────
-summary = get_hw_summary(hw_id, email, submissions)
 summary = get_hw_summary(hw_id, email, submissions)
 score_so_far = (
     " · Score so far: <strong>" + str(summary["total_score"]) + " / " + str(summary["total_max"]) + "</strong>"

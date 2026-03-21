@@ -399,6 +399,99 @@ def auto_register_homeworks(all_hw_configs: dict):
         pass
 
 
+# ── Gradebook generator ───────────────────────────────────────────────────────
+def generate_gradebook_sheet(all_hw_configs: dict):
+    """
+    Creates or updates a Gradebook tab in the Sheet.
+    Rows = students. Columns = HW_ID + per-homework score/max.
+    Returns (True, n_students) or (False, error_message).
+    """
+    try:
+        sh       = get_spreadsheet()
+        existing = [ws.title for ws in sh.worksheets()]
+
+        # Get all students
+        students = get_all_students()
+        if not students:
+            return False, "No students enrolled."
+
+        # Get all submissions
+        subs = get_all_submissions()
+        # Build lookup: {email: {hw_id: total_score}}
+        scores = {}
+        for row in subs:
+            if str(row.get("Status","")) != "submitted":
+                continue
+            em    = str(row.get("Email","")).strip().lower()
+            hw    = str(row.get("Homework_ID","")).strip()
+            try:
+                sc = int(row.get("Score", 0))
+            except Exception:
+                sc = 0
+            scores.setdefault(em, {})
+            scores[em][hw] = scores[em].get(hw, 0) + sc
+
+        # Sort homeworks chronologically
+        import re as _re
+        def _wn(hid):
+            m = _re.search(r"(\d+)", hid)
+            return int(m.group(1)) if m else 999
+        hw_ids = sorted(all_hw_configs.keys(), key=_wn)
+
+        # Get max marks per hw
+        max_marks = {}
+        hw_configs = get_homework_configs()
+        for cfg in hw_configs:
+            hid = cfg.get("HW_ID","")
+            try:
+                max_marks[hid] = int(cfg.get("Max_Marks", 0) or 0)
+            except Exception:
+                max_marks[hid] = 0
+
+        # Build header row
+        header = ["Email", "First Name", "Last Name"]
+        for hid in hw_ids:
+            mx = max_marks.get(hid, "?")
+            header.append(f"{hid} Score")
+            header.append(f"{hid} Max ({mx})")
+        header.append("Total Score")
+        header.append("Total Max")
+
+        # Build data rows
+        data = [header]
+        for stu in students:
+            em   = str(stu.get("Email","")).strip().lower()
+            row  = [em,
+                    stu.get("First_Name",""),
+                    stu.get("Last_Name","")]
+            total_score = 0; total_max = 0
+            for hid in hw_ids:
+                sc = scores.get(em, {}).get(hid, 0)
+                mx = max_marks.get(hid, 0)
+                row.append(sc)
+                row.append(mx)
+                total_score += sc
+                total_max   += mx
+            row.append(total_score)
+            row.append(total_max)
+            data.append(row)
+
+        # Create or clear Gradebook tab
+        if "Gradebook" in existing:
+            ws = sh.worksheet("Gradebook")
+            ws.clear()
+        else:
+            ws = sh.add_worksheet(
+                title="Gradebook",
+                rows=max(len(data)+10, 200),
+                cols=len(header)+5
+            )
+        ws.update("A1", data)
+        return True, len(students)
+    except Exception as e:
+        return False, str(e)[:200]
+
+
 # ── Auto-enable check ─────────────────────────────────────────────────────────
 def check_auto_enable():
     """Enable homeworks whose Auto_Enable_Date has passed. Run on app load."""

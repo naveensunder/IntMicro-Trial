@@ -101,10 +101,11 @@ for cfg in hw_configs:
         )
 
 # ── Placeholder homeworks for upcoming weeks ───────────────────────────────────
+# Placeholders for weeks not yet in question_engine.py
+# HW_WEEK1 removed — now auto-registered via question_engine.py
 PLACEHOLDERS = [
-    {"HW_ID": "HW_WEEK1", "Title": "Week 1 — Introduction & PPF",           "Week": 1},
-    {"HW_ID": "HW_WEEK3", "Title": "Week 3 — Consumer Preferences",         "Week": 3},
-    {"HW_ID": "HW_WEEK4", "Title": "Week 4 — Utility Maximisation",         "Week": 4},
+    {"HW_ID": "HW_WEEK3", "Title": "Week 3 — Consumer Preferences",  "Week": 3},
+    {"HW_ID": "HW_WEEK4", "Title": "Week 4 — Utility Maximisation",  "Week": 4},
 ]
 
 # ── Classify and sort assignments ──────────────────────────────────────────────

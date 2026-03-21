@@ -1328,12 +1328,12 @@ def _render_w1_tf(q_config, hw_id, email, past_deadline, grace_active,
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"{q_title}  ·  Score: {score} / {marks}"
-        if already else q_title
-    )
+    if already:
+        banner_label = f"{q_title}  ·  Score: {score} / {marks}"
+    else:
+        banner_label = f"{q_title}  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
@@ -1520,12 +1520,12 @@ def _render_w1_q2(q_config, hw_id, email, past_deadline, grace_active, submissio
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"Question 2 — Slopes of Linear Functions  ·  Score: {score} / {marks}"
-        if already else "Question 2 — Slopes of Linear Functions"
-    )
+    if already:
+        banner_label = f"Question 2 — Slopes of Linear Functions  ·  Score: {score} / {marks}"
+    else:
+        banner_label = "Question 2 — Slopes of Linear Functions  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
@@ -1759,12 +1759,12 @@ def _render_w1_q3(q_config, hw_id, email, past_deadline, grace_active, submissio
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"Question 3 — Derivatives & Partial Derivatives  ·  Score: {score} / {marks}"
-        if already else "Question 3 — Derivatives & Partial Derivatives"
-    )
+    if already:
+        banner_label = f"Question 3 — Derivatives & Partial Derivatives  ·  Score: {score} / {marks}"
+    else:
+        banner_label = "Question 3 — Derivatives & Partial Derivatives  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
@@ -2035,12 +2035,12 @@ def _render_w1_q4(q_config, hw_id, email, past_deadline, grace_active, submissio
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"Question 4 — Demand, Supply & Equilibrium  ·  Score: {score} / {marks}"
-        if already else "Question 4 — Demand, Supply & Equilibrium"
-    )
+    if already:
+        banner_label = f"Question 4 — Demand, Supply & Equilibrium  ·  Score: {score} / {marks}"
+    else:
+        banner_label = "Question 4 — Demand, Supply & Equilibrium  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
@@ -2306,12 +2306,12 @@ def _render_w1_q6(q_config, hw_id, email, past_deadline, grace_active, submissio
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"Question 6 — Indifference Curves  ·  Score: {score} / {marks}"
-        if already else "Question 6 — Indifference Curves"
-    )
+    if already:
+        banner_label = f"Question 6 — Indifference Curves  ·  Score: {score} / {marks}"
+    else:
+        banner_label = "Question 6 — Indifference Curves  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
@@ -2578,12 +2578,12 @@ def _render_w1_q7(q_config, hw_id, email, past_deadline, grace_active, submissio
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"Question 7 — Marginal Utility  ·  Score: {score} / {marks}"
-        if already else "Question 7 — Marginal Utility"
-    )
+    if already:
+        banner_label = f"Question 7 — Marginal Utility  ·  Score: {score} / {marks}"
+    else:
+        banner_label = "Question 7 — Marginal Utility  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
@@ -2807,12 +2807,12 @@ def _render_w1_q8(q_config, hw_id, email, past_deadline, grace_active, submissio
     disabled = already or (past_deadline and not grace_active)
     score    = int(prev.get("Score", 0)) if already else None
 
-    banner_label = (
-        f"Question 8 — Marginal Rate of Substitution  ·  Score: {score} / {marks}"
-        if already else "Question 8 — Marginal Rate of Substitution"
-    )
+    if already:
+        banner_label = f"Question 8 — Marginal Rate of Substitution  ·  Score: {score} / {marks}"
+    else:
+        banner_label = "Question 8 — Marginal Rate of Substitution  ·  Not yet attempted"
 
-    with st.expander(banner_label, expanded=not already):
+    with st.expander(banner_label, expanded=False):
 
         st.markdown(
             f'<div class="q-body">'
