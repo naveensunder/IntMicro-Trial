@@ -23,7 +23,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import io, base64
-from db import write_submission
+from db import write_submission, log_submission_attempt
 
 
 def get_seed(email: str) -> int:
@@ -351,7 +351,7 @@ def _render_q1(q_config, hw_id, email, past_deadline, grace_active, submissions)
         if already:
             d  = _parse_raw(prev)
             xv = float(d.get("xint",0)); yv = float(d.get("yint",0)); sv = float(d.get("slope",0))
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -422,7 +422,7 @@ def _render_q1(q_config, hw_id, email, past_deadline, grace_active, submissions)
         # ── Solution ───────────────────────────────────────────────────────────
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_q1_solution(prev, ANS_x, ANS_y, ANS_s, I, Px, Py)
 
     # Back to top
@@ -444,6 +444,7 @@ def _submit_q1(hw_id, email, xint_ans, yint_ans, slope_ans,
     raw  = str({"xint":r2(xint_ans),"yint":r2(yint_ans),"slope":r2(slope_ans)})
     corr = str({"xint":ANS_x,"yint":ANS_y,"slope":ANS_s})
     ok, err = write_submission([ts,email,hw_id,"Q1","numerical","submitted",late,raw,sc,6,corr])
+    log_submission_attempt(email, hw_id, "Q1", raw, sc, 6)
     st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})["Q1"] = {
         "Status":"submitted","Timestamp":ts,"Score":sc,
         "Max_Score":6,"Is_Late":late,"Raw_Answer":raw}
@@ -634,7 +635,7 @@ def _render_q2(q_config, hw_id, email, past_deadline, grace_active, submissions)
             d  = _parse_raw(prev)
             tx = float(d.get("tom_x",0)); ty = float(d.get("tom_y",0))
             jx = float(d.get("jerry_x",0)); jy = float(d.get("jerry_y",0))
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -703,7 +704,7 @@ def _render_q2(q_config, hw_id, email, past_deadline, grace_active, submissions)
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_q2_solution(prev, ANS_tx, ANS_ty, ANS_jx, ANS_jy, I, Px, Py, tom_a)
 
     if already:
@@ -725,6 +726,7 @@ def _submit_q2(hw_id, email, tom_x, tom_y, jerry_x, jerry_y,
                 "jerry_x":r2(jerry_x),"jerry_y":r2(jerry_y)})
     corr = str({"tom":f"({ANS_tx},{ANS_ty})","jerry":f"({ANS_jx},{ANS_jy})"})
     ok, err = write_submission([ts,email,hw_id,"Q2","numerical","submitted",late,raw,sc,8,corr])
+    log_submission_attempt(email, hw_id, "Q2", raw, sc, 8)
     st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})["Q2"] = {
         "Status":"submitted","Timestamp":ts,"Score":sc,
         "Max_Score":8,"Is_Late":late,"Raw_Answer":raw}
@@ -903,7 +905,7 @@ def _render_q3_tf(q_config, hw_id, email, past_deadline, grace_active, submissio
                     pa = eval(str(raw))
                     if isinstance(pa, dict): prev_answers = pa
                 except Exception: pass
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     '<div class="submitted-ans">'
                     '<div class="submitted-ans-label">Your Submitted Answers</div>',
@@ -961,7 +963,7 @@ def _render_q3_tf(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_q3_tf_solution(prev, statements, correct)
 
     if already:
@@ -979,6 +981,7 @@ def _submit_q3_tf(hw_id, email, student_answers, correct, past_deadline):
     raw  = str({f"s{i}":v for i,v in enumerate(student_answers)})
     corr = str({f"s{i}":v for i,v in enumerate(correct)})
     ok, err = write_submission([ts,email,hw_id,"Q3","truefalse","submitted",late,raw,sc,4,corr])
+    log_submission_attempt(email, hw_id, "Q3", raw, sc, 4)
     st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})["Q3"] = {
         "Status":"submitted","Timestamp":ts,"Score":sc,
         "Max_Score":4,"Is_Late":late,"Raw_Answer":raw}
@@ -1372,7 +1375,7 @@ def _render_w1_tf(q_config, hw_id, email, past_deadline, grace_active,
             except Exception: pass
 
         if already:
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     '<div class="submitted-ans">'
                     '<div class="submitted-ans-label">Your Submitted Answers</div>',
@@ -1424,7 +1427,7 @@ def _render_w1_tf(q_config, hw_id, email, past_deadline, grace_active,
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_tf_solution(prev, statements, correct, marks)
 
     if already:
@@ -1442,6 +1445,7 @@ def _submit_w1_tf(hw_id, q_id, email, student_answers, correct, marks, past_dead
     raw  = str({f"s{i}": v for i,v in enumerate(student_answers)})
     corr = str({f"s{i}": v for i,v in enumerate(correct)})
     ok, err = write_submission([ts,email,hw_id,q_id,"truefalse","submitted",late,raw,sc,marks,corr])
+    log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
     st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
         "Status":"submitted","Timestamp":ts,"Score":sc,
         "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -1576,7 +1580,7 @@ def _render_w1_q2(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             d = _parse_raw(prev)
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -1637,6 +1641,7 @@ def _render_w1_q2(q_config, hw_id, email, past_deadline, grace_active, submissio
                                         "same_line": not same_correct})
                             ok, err = write_submission([ts,email,hw_id,q_id,"numerical",
                                                         "submitted",late,raw,sc,marks,corr])
+                            log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
                             st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
                                 "Status":"submitted","Timestamp":ts,"Score":sc,
                                 "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -1657,7 +1662,7 @@ def _render_w1_q2(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_q2_solution(prev, x1, y1, x2, y2, a, b, c, slope_pts, slope_eq)
 
     if already:
@@ -1809,7 +1814,7 @@ def _render_w1_q3(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             d = _parse_raw(prev)
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -1898,6 +1903,7 @@ def _render_w1_q3(q_config, hw_id, email, past_deadline, grace_active, submissio
                                         "mux":round(mux,4),"muy":round(muy,4)})
                             ok, err = write_submission([ts,email,hw_id,q_id,"numerical",
                                                         "submitted",late,raw,sc,marks,corr])
+                            log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
                             st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
                                 "Status":"submitted","Timestamp":ts,"Score":sc,
                                 "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -1918,7 +1924,7 @@ def _render_w1_q3(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_q3_solution(prev, X, Y, mux, muy, marks)
 
     if already:
@@ -2089,7 +2095,7 @@ def _render_w1_q4(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             d = _parse_raw(prev)
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -2165,6 +2171,7 @@ def _render_w1_q4(q_config, hw_id, email, past_deadline, grace_active, submissio
                                         "pnew":P_new,"qnew":Q_new})
                             ok, err = write_submission([ts,email,hw_id,q_id,"numerical",
                                                         "submitted",late,raw,sc,marks,corr])
+                            log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
                             st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
                                 "Status":"submitted","Timestamp":ts,"Score":sc,
                                 "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -2185,7 +2192,7 @@ def _render_w1_q4(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_q4_solution(prev, A, a, B, b, P_star, Q_star,
                                      P_off, Qd_off, Qs_off, shortage,
                                      shift, B_new, P_new, Q_new, marks)
@@ -2359,7 +2366,7 @@ def _render_w1_q6(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             d = _parse_raw(prev)
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -2440,6 +2447,7 @@ def _render_w1_q6(q_config, hw_id, email, past_deadline, grace_active, submissio
                                         "same_ic":"A and B","preferred":f"D = ({XD}, {YD})" if d_dominates else "Cannot tell"})
                             ok, err = write_submission([ts,email,hw_id,q_id,"numerical",
                                                         "submitted",late,raw,sc,marks,corr])
+                            log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
                             st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
                                 "Status":"submitted","Timestamp":ts,"Score":sc,
                                 "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -2460,7 +2468,7 @@ def _render_w1_q6(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_q6_solution(prev, XA, YA, XB, YB, XC, YC,
                                      U_AB, U_C, XD, YD, XE, YE, marks)
 
@@ -2625,7 +2633,7 @@ def _render_w1_q7(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             d = _parse_raw(prev)
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -2689,6 +2697,7 @@ def _render_w1_q7(q_config, hw_id, email, past_deadline, grace_active, submissio
                                         "mux_direction":"Decreases"})
                             ok, err = write_submission([ts,email,hw_id,q_id,"numerical",
                                                         "submitted",late,raw,sc,marks,corr])
+                            log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
                             st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
                                 "Status":"submitted","Timestamp":ts,"Score":sc,
                                 "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -2709,7 +2718,7 @@ def _render_w1_q7(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_q7_solution(prev, X, Y, mux, muy, marks)
 
     if already:
@@ -2862,7 +2871,7 @@ def _render_w1_q8(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             d = _parse_raw(prev)
-            with st.expander("Your submitted answers", expanded=False):
+            with st.expander("📝 Your Submitted Answers", expanded=False):
                 st.markdown(
                     f'<div class="submitted-ans">'
                     f'<div class="submitted-ans-label">Your Submitted Answers</div>'
@@ -2932,6 +2941,7 @@ def _render_w1_q8(q_config, hw_id, email, past_deadline, grace_active, submissio
                                         "buy_more":f"More {correct_buy}"})
                             ok, err = write_submission([ts,email,hw_id,q_id,"numerical",
                                                         "submitted",late,raw,sc,marks,corr])
+                            log_submission_attempt(email, hw_id, q_id, raw, sc, marks)
                             st.session_state.setdefault("submissions",{}).setdefault(hw_id,{})[q_id] = {
                                 "Status":"submitted","Timestamp":ts,"Score":sc,
                                 "Max_Score":marks,"Is_Late":late,"Raw_Answer":raw}
@@ -2952,7 +2962,7 @@ def _render_w1_q8(q_config, hw_id, email, past_deadline, grace_active, submissio
 
         if already:
             st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            with st.expander("Show / hide solution", expanded=False):
+            with st.expander("Show / Hide Correct Solution", expanded=False):
                 _show_w1_q8_solution(prev, X1, Y1, X2, Y2, mrs1, mrs2,
                                      Px, Py, price_ratio, marks)
 

@@ -21,6 +21,7 @@ TAB_REGISTRY          = "Registry"
 TAB_SUBMISSIONS       = "Submissions"
 TAB_CONFIG            = "Config"
 TAB_AUDIT_SUBMISSIONS = "AuditSubmissions"
+TAB_AUDIT             = "Audit"
 
 SHEET_ID = "1QQHk9bf9kC-35im2mswvUwSTymnb4rCv1yYLgbfu9xA"
 
@@ -127,6 +128,7 @@ def init_sheets():
     ensure(TAB_REGISTRY,          REGISTRY_HEADER)
     ensure(TAB_SUBMISSIONS,       SUBMISSIONS_HEADER)
     ensure(TAB_AUDIT_SUBMISSIONS, AUDIT_SUBMISSIONS_HEADER)
+    ensure(TAB_AUDIT,             AUDIT_HEADER)
 
     if TAB_CONFIG not in existing:
         ws = sh.add_worksheet(title=TAB_CONFIG, rows=500, cols=15)
@@ -606,20 +608,25 @@ def check_auto_enable():
 # ── Audit ──────────────────────────────────────────────────────────────────────
 @_with_retry()
 def log_audit(actor: str, action: str, detail: str = ""):
+    """Write instructor action to dedicated Audit sheet — never touches Config."""
     try:
-        ws    = get_tab(TAB_CONFIG)
-        rows  = ws.get_all_values()
-        start = next(
-            (i for i, r in enumerate(rows)
-             if len(r) > 0 and r[0] == "Timestamp" and i > 20),
-            None
-        )
-        if start is None:
-            return
+        ws = get_tab(TAB_AUDIT)
+        if not ws.cell(1, 1).value:
+            ws.update("A1", [AUDIT_HEADER])
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ws.append_row([ts, actor, action, detail])
     except Exception:
         pass
+
+
+def get_audit_log() -> list:
+    """Return all audit rows newest-first for Audit tab display."""
+    try:
+        ws   = get_tab(TAB_AUDIT)
+        rows = ws.get_all_records()
+        return list(reversed(rows)) if rows else []
+    except Exception:
+        return []
 
 
 # ── Deadline ───────────────────────────────────────────────────────────────────
