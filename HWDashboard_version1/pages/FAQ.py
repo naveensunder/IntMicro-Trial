@@ -1,21 +1,31 @@
 """
-pages/FAQ.py
-HWDashboard v3
+pages/FAQ.py — HWDashboard v11
+Phase 5: standardised title, breadcrumb, section_rule, page_footer,
+         sidebar brand, remove <br> spacers.
 """
 import streamlit as st
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from ui import inject_css, page_header, page_footer
+from ui import inject_css, page_header, page_footer, breadcrumb, section_rule, sidebar_brand
 
-st.set_page_config(page_title="FAQ — Microeconomics", page_icon="❓",
-                   layout="centered", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="EC224 — FAQ · Bentley",
+    page_icon="❓",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
 inject_css()
 
 if not st.session_state.get("authenticated"):
     st.warning("Please sign in first.")
-    if st.button("Go to sign in"): st.switch_page("Home.py")
+    if st.button("Go to sign in"):
+        st.switch_page("Home.py")
     st.stop()
 
+name = st.session_state.get("student_name", "")
+sidebar_brand(name)
+breadcrumb("Dashboard", "FAQ")
 page_header("Intermediate Microeconomics", "Frequently Asked Questions")
 
 FAQS = [
@@ -30,7 +40,7 @@ FAQS = [
          "The app works on mobile but is designed for laptop or desktop. On a small screen some layouts may be hard to read."),
     ]),
     ("Completing Assignments", [
-        ("Why are my question numbers different from my classmates?",
+        ("Why are my question numbers different from my classmates'?",
          "Each student receives unique parameter values (numbers) for each question, generated from your email address. The method to solve is identical for everyone. This ensures academic integrity."),
         ("The Submit button is not appearing.",
          "The Submit button only appears once all answer boxes have a non-zero value. Make sure every input field has been filled in."),
@@ -68,23 +78,18 @@ FAQS = [
 ]
 
 for section, items in FAQS:
-    st.markdown(
-        f'<div style="font-size:0.68rem;font-weight:600;letter-spacing:0.1em;'
-        f'text-transform:uppercase;color:#6B7280;margin:1.5rem 0 0.6rem 0;'
-        f'padding-bottom:0.3rem;border-bottom:1px solid #E5E7EB;">{section}</div>',
-        unsafe_allow_html=True
-    )
+    section_rule(section)
     for q, a in items:
         with st.expander(q):
             st.markdown(f'<div class="faq-a">{a}</div>', unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.divider()
 st.markdown(
     '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:7px;'
     'padding:0.9rem 1.1rem;font-size:0.84rem;color:#6B7280;">'
     'Still have a question? Email <a href="mailto:nsunder@bentley.edu" '
     'style="color:#2563EB;">nsunder@bentley.edu</a></div>',
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 page_footer()

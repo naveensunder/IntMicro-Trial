@@ -1,12 +1,23 @@
 """
 pages/Instructor.py — Instructor dashboard.
-HWDashboard v9 — unified semester table, hybrid details panel.
+HWDashboard v11 — Phase 3:
+  - Audit tab separated from Settings
+  - section_header() replaces all inline .sec divs
+  - Fragile HTML div open/close removed; native Streamlit containers used
+  - st.markdown('<br>') replaced with st.divider()
+  - Redundant st.code(key) and caption removed from Overview
+  - Overview data consolidated to single fetch at tab entry
+  - last-updated chip on Overview
+  - Proper modal-style confirmations for destructive actions
+  - dark_mode_toggle in Settings
+  - page_footer on every render
 """
 import streamlit as st
 import datetime
 import pandas as pd
 import re
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from db import (
@@ -18,34 +29,24 @@ from db import (
     get_student_submissions, check_auto_enable,
     auto_register_homeworks, generate_gradebook_sheet,
 )
-from ui import inject_css, page_header, COLORS
+from ui import (
+    inject_css, page_header, section_header, banner,
+    last_updated_chip, page_footer, dark_mode_toggle, COLORS,
+)
 
-st.set_page_config(page_title="Instructor Dashboard", page_icon="🔐",
-                   layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="EC224 — Instructor · Bentley",
+    page_icon="🔐",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 inject_css()
 
-st.markdown(f"""
-<style>
-.block-container {{ max-width: 1150px; }}
-.dash-metric {{
-    background:#FFFFFF; border:1.5px solid {COLORS['grey_mid']};
-    border-radius:9px; padding:1.1rem 1.3rem; text-align:center;
-}}
-.dash-metric-num {{
-    font-family:'DM Serif Display',serif; font-size:2rem;
-    color:{COLORS['navy']}; line-height:1;
-}}
-.dash-metric-lbl {{
-    font-size:0.8rem; color:{COLORS['grey_text']}; margin-top:0.3rem;
-    font-weight:600; text-transform:uppercase; letter-spacing:0.07em;
-}}
-.sec {{
-    font-family:'DM Serif Display',serif; font-size:1.1rem;
-    color:{COLORS['navy']}; margin:1.6rem 0 0.7rem 0;
-    padding-bottom:0.35rem; border-bottom:2px solid {COLORS['grey_mid']};
-}}
-</style>
-""", unsafe_allow_html=True)
+# Instructor-specific width override
+st.markdown(
+    "<style>.block-container { max-width: 1150px; }</style>",
+    unsafe_allow_html=True,
+)
 
 
 def _week_num(hw_id: str) -> int:
@@ -56,27 +57,26 @@ def _week_num(hw_id: str) -> int:
 # ── Auth gate ──────────────────────────────────────────────────────────────────
 if not st.session_state.get("instructor_auth"):
     st.markdown(
-        f'<div style="max-width:380px;margin:3rem auto;text-align:center;">'
-        f'<div style="font-family:\'DM Serif Display\',serif;font-size:1.35rem;'
-        f'color:{COLORS["navy"]};margin-bottom:0.35rem;">Instructor Access</div>'
-        f'<div style="font-size:0.81rem;color:{COLORS["grey_text"]};'
-        f'margin-bottom:1.4rem;">Intermediate Microeconomics</div>'
-        f'</div>',
-        unsafe_allow_html=True
+        '<div style="max-width:380px;margin:3rem auto;text-align:center;">'
+        '<div style="font-family:\'DM Serif Display\',serif;font-size:1.35rem;'
+        'color:#1C2B4A;margin-bottom:0.35rem;">Instructor Access</div>'
+        '<div style="font-size:0.81rem;color:#555555;'
+        'margin-bottom:1.4rem;">Intermediate Microeconomics — Bentley University</div>'
+        '</div>',
+        unsafe_allow_html=True,
     )
     col = st.columns([1, 2, 1])[1]
     with col:
         pwd = st.text_input("Password", type="password", key="inst_pw")
         if st.button("Sign In", use_container_width=True, key="inst_in"):
-            # Brute force protection — same pattern as student login
             inst_attempts = st.session_state.get("inst_login_attempts", 0)
             inst_lockout  = st.session_state.get("inst_lockout_until", None)
             if inst_lockout and datetime.datetime.now() < inst_lockout:
                 secs = int((inst_lockout - datetime.datetime.now()).total_seconds())
                 st.error(f"Too many failed attempts. Please wait {secs} seconds.")
             elif verify_instructor(pwd):
-                st.session_state["instructor_auth"]      = True
-                st.session_state["inst_login_attempts"]  = 0
+                st.session_state["instructor_auth"]     = True
+                st.session_state["inst_login_attempts"] = 0
                 st.session_state.pop("inst_lockout_until", None)
                 log_audit("instructor", "LOGIN", "")
                 st.rerun()
@@ -85,27 +85,28 @@ if not st.session_state.get("instructor_auth"):
                 st.session_state["inst_login_attempts"] = inst_attempts
                 if inst_attempts >= 5:
                     st.session_state["inst_lockout_until"] = (
-                        datetime.datetime.now() + datetime.timedelta(minutes=5))
+                        datetime.datetime.now() + datetime.timedelta(minutes=5)
+                    )
                     st.error("Too many failed attempts. Locked for 5 minutes.")
                 else:
-                    st.error(f"Incorrect password. {5 - inst_attempts} attempts remaining.")
-    st.markdown(
-        '<div style="max-width:380px;margin:1rem auto;">'
-        '<div class="banner banner-warning" style="font-size:0.85rem;">'
-        'Please change your instructor password in the Settings tab '
-        'if you have not already done so.</div></div>',
-        unsafe_allow_html=True
-    )
+                    remaining = 5 - inst_attempts
+                    st.error(f"Incorrect password. {remaining} attempts remaining.")
+        st.markdown(
+            '<div class="banner banner-warning" style="font-size:0.85rem;margin-top:1rem;">'
+            "Please change your instructor password in the Settings tab "
+            "if you have not already done so.</div>",
+            unsafe_allow_html=True,
+        )
     st.stop()
 
 
 page_header(
     "Intermediate Microeconomics",
     "Instructor Dashboard",
-    datetime.datetime.now().strftime("%d %b %Y, %H:%M")
+    datetime.datetime.now().strftime("%d %b %Y, %H:%M"),
 )
 
-# Auto-register any new homeworks from question_engine and check auto-enable
+# Auto-register new homeworks and check auto-enable
 from question_engine import ALL_HW_CONFIGS
 try:
     auto_register_homeworks(ALL_HW_CONFIGS)
@@ -113,20 +114,36 @@ try:
 except Exception:
     pass
 
-tabs = st.tabs(["📊 Overview", "📚 Assignments", "👥 Students", "⚙️ Settings"])
+tabs = st.tabs([
+    "📊 Overview",
+    "📚 Assignments",
+    "👥 Students",
+    "⚙️ Settings",
+    "🔍 Audit",
+])
 
 
 # ════════════════════════════════════════════════════════════════════════════════
 #  TAB 1 — OVERVIEW
 # ════════════════════════════════════════════════════════════════════════════════
 with tabs[0]:
-    if st.button("↻ Refresh", key="ref_ov"):
+    col_ref, col_ts = st.columns([1, 5])
+    with col_ref:
+        refresh_ov = st.button("↻ Refresh", key="ref_ov")
+    if refresh_ov:
         st.rerun()
 
     with st.spinner("Loading..."):
-        students    = get_all_students()
-        submissions = get_all_submissions()
-        hw_configs  = get_homework_configs()
+        # ── Single consolidated data fetch ──
+        students    = get_all_students() or []
+        submissions = get_all_submissions() or []
+        hw_configs  = get_homework_configs() or []
+        _fetched_at = datetime.datetime.now().strftime("%H:%M:%S")
+
+    with col_ts:
+        st.markdown("<div style='padding-top:0.55rem;'>", unsafe_allow_html=True)
+        last_updated_chip(_fetched_at)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     df = pd.DataFrame(submissions) if submissions else pd.DataFrame()
     n_sub = (
@@ -134,6 +151,7 @@ with tabs[0]:
         if not df.empty and "Status" in df.columns else 0
     )
 
+    # ── Metrics ──
     c1, c2, c3, c4 = st.columns(4)
     for col, num, lbl in [
         (c1, len(students),   "Enrolled Students"),
@@ -148,10 +166,11 @@ with tabs[0]:
             f'<div class="dash-metric-num">{num}</div>'
             f'<div class="dash-metric-lbl">{lbl}</div>'
             f'</div>',
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
-    st.markdown('<div class="sec">Enrollment Key</div>', unsafe_allow_html=True)
+    # ── Enrollment key ──
+    section_header("Enrollment Key", "🔑")
     key = get_enrollment_key()
     st.markdown(
         f'<div style="background:#F5F5F5;border:1.5px solid #E0E0E0;'
@@ -159,20 +178,19 @@ with tabs[0]:
         f'<div style="font-size:0.67rem;font-weight:600;text-transform:uppercase;'
         f'letter-spacing:0.1em;color:#555555;margin-bottom:0.25rem;">Current Key</div>'
         f'<div style="font-family:monospace;font-size:1.45rem;font-weight:700;'
-        f'color:{COLORS["navy"]};letter-spacing:0.18em;">{key}</div>'
+        f'color:#1C2B4A;letter-spacing:0.18em;">{key}</div>'
         f'<div style="font-size:0.8rem;color:#6B7280;margin-top:0.25rem;">'
         f'Share with students. Auto-rotates every 6 months.</div></div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-    st.code(key, language=None)
-    st.caption("Select and copy the key above.")
 
+    # ── Question analytics ──
     if not df.empty and "Question_ID" in df.columns:
-        st.markdown('<div class="sec">Question Analytics</div>',
-                    unsafe_allow_html=True)
+        section_header("Question Analytics", "📈")
         sub_df = df[df["Status"] == "submitted"].copy()
         sub_df = sub_df.drop_duplicates(
-            subset=["Email", "Homework_ID", "Question_ID"], keep="last")
+            subset=["Email", "Homework_ID", "Question_ID"], keep="last"
+        )
         sub_df["Score"]     = pd.to_numeric(sub_df["Score"],     errors="coerce")
         sub_df["Max_Score"] = pd.to_numeric(sub_df["Max_Score"], errors="coerce")
         if not sub_df.empty:
@@ -184,22 +202,29 @@ with tabs[0]:
             grp["Success_Rate_%"] = (
                 grp["Avg_Score"] / grp["Max_Score"] * 100
             ).round(1)
-            st.dataframe(grp.sort_values("Success_Rate_%"),
-                         use_container_width=True)
+            st.dataframe(
+                grp.sort_values("Success_Rate_%"),
+                use_container_width=True,
+            )
 
-    st.markdown('<div class="sec">Submission Log</div>', unsafe_allow_html=True)
+    # ── Submission log ──
+    section_header("Submission Log", "📋")
     with st.expander("Show all rows"):
         if not df.empty:
             st.dataframe(df, use_container_width=True)
-            st.download_button("⬇ Download all submissions CSV",
-                               df.to_csv(index=False).encode("utf-8"),
-                               "submissions.csv", "text/csv", key="dl_all")
+            st.download_button(
+                "⬇ Download all submissions CSV",
+                df.to_csv(index=False).encode("utf-8"),
+                "submissions.csv", "text/csv", key="dl_all",
+            )
             st.markdown("**Gradebook:**")
             sub_only = df[df["Status"] == "submitted"].copy()
             sub_only = sub_only.drop_duplicates(
-                subset=["Email", "Homework_ID", "Question_ID"], keep="last")
+                subset=["Email", "Homework_ID", "Question_ID"], keep="last"
+            )
             sub_only["Score"] = pd.to_numeric(
-                sub_only["Score"], errors="coerce").fillna(0)
+                sub_only["Score"], errors="coerce"
+            ).fillna(0)
             gb = sub_only.groupby("Email")["Score"].sum().reset_index()
             gb.columns = ["Email", "Total_Score"]
             stu_df = pd.DataFrame(students)
@@ -207,16 +232,20 @@ with tabs[0]:
                 safe = stu_df[["Email", "First_Name", "Last_Name"]].copy()
                 safe["Email"] = safe["Email"].str.lower()
                 gb = gb.merge(safe, on="Email", how="left")
-            st.download_button("⬇ Download Gradebook CSV",
-                               gb.to_csv(index=False).encode("utf-8"),
-                               "gradebook.csv", "text/csv", key="dl_gb")
+            st.download_button(
+                "⬇ Download Gradebook CSV",
+                gb.to_csv(index=False).encode("utf-8"),
+                "gradebook.csv", "text/csv", key="dl_gb",
+            )
         else:
             st.info("No submissions yet.")
 
-    st.markdown('<div class="sec">Gradebook Sheet</div>', unsafe_allow_html=True)
+    # ── Gradebook sheet ──
+    section_header("Gradebook Sheet", "📊")
     st.caption(
         "Generate a Gradebook tab in your Google Sheet with one row per student "
-        "and one column per homework. Updates every time you click.")
+        "and one column per homework. Updates every time you click."
+    )
     if st.button("Generate / Update Gradebook Sheet", key="gen_gb",
                  use_container_width=True):
         with st.spinner("Generating gradebook..."):
@@ -225,30 +254,31 @@ with tabs[0]:
             log_audit("instructor", "GRADEBOOK_GENERATED", f"{result} students")
             st.success(
                 f"✓ Gradebook updated — {result} students · "
-                f"Check the 'Gradebook' tab in your Google Sheet.")
+                f"Check the 'Gradebook' tab in your Google Sheet."
+            )
         else:
             st.error(f"Failed to generate gradebook: {result}")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-#  TAB 2 — ASSIGNMENTS (unified semester table + hybrid details)
+#  TAB 2 — ASSIGNMENTS
 # ════════════════════════════════════════════════════════════════════════════════
 with tabs[1]:
-    st.markdown('<div class="sec">Semester Assignment Schedule</div>',
-                unsafe_allow_html=True)
+    section_header("Semester Assignment Schedule", "📅")
     st.caption(
         "All assignments are listed below. "
         "Edit fields inline and click Save for each row. "
-        "Use the details panel to set announcements and instructions.")
+        "Use the details panel to set announcements and instructions."
+    )
 
     if st.button("↻ Refresh", key="ref_hw"):
         st.rerun()
 
-    hw_configs = get_homework_configs()
+    hw_configs = get_homework_configs() or []
 
-    # Get submission counts for all homeworks
+    # Submission counts — reuse from overview if already loaded, else fetch
     try:
-        all_subs = get_all_submissions()
+        all_subs = get_all_submissions() or []
         df_subs  = pd.DataFrame(all_subs) if all_subs else pd.DataFrame()
     except Exception:
         df_subs = pd.DataFrame()
@@ -264,7 +294,8 @@ with tabs[1]:
         ])
 
     hw_configs_sorted = sorted(
-        hw_configs, key=lambda x: _week_num(x.get("HW_ID", "")))
+        hw_configs, key=lambda x: _week_num(x.get("HW_ID", ""))
+    )
 
     if not hw_configs_sorted:
         st.info("No assignments found. They will appear here automatically.")
@@ -281,38 +312,43 @@ with tabs[1]:
             n_subs  = _sub_count(hw_id)
             marks   = cfg.get("Max_Marks", "—")
 
-            # Parse deadline
             try:
-                dl_dt = datetime.datetime.strptime(dl.strip(), "%Y-%m-%d %H:%M")
+                dl_dt          = datetime.datetime.strptime(dl.strip(), "%Y-%m-%d %H:%M")
                 is_placeholder = dl_dt.year == 2099
             except Exception:
-                dl_dt = None
+                dl_dt          = None
                 is_placeholder = True
 
-            # Parse opening date
             try:
-                op_dt = datetime.datetime.strptime(
-                    opening.strip(), "%Y-%m-%d %H:%M") if opening.strip() else None
+                op_dt = (
+                    datetime.datetime.strptime(opening.strip(), "%Y-%m-%d %H:%M")
+                    if opening.strip() else None
+                )
             except Exception:
                 op_dt = None
 
-            # ── Row header ─────────────────────────────────────────────────────
-            status_badge = (
-                "🟢 Open" if enabled and not is_placeholder else
-                "🔴 Closed" if not enabled else
-                "⏳ Pending deadline"
-            )
+            # Status pill label
+            if enabled and not is_placeholder:
+                pill_html = '<span class="pill pill-open">Open</span>'
+            elif not enabled:
+                pill_html = '<span class="pill pill-closed">Closed</span>'
+            else:
+                pill_html = '<span class="pill pill-upcoming">Pending</span>'
+
+            # ── Row header ──
             st.markdown(
                 f'<div style="background:#F5F5F5;border:1.5px solid #E0E0E0;'
                 f'border-radius:8px 8px 0 0;padding:0.6rem 1rem;'
                 f'display:flex;justify-content:space-between;align-items:center;">'
-                f'<span style="font-weight:600;font-size:1rem;color:{COLORS["navy"]};">'
+                f'<span style="font-weight:600;font-size:1rem;color:#1C2B4A;">'
                 f'{title}</span>'
-                f'<span style="font-size:0.85rem;color:{COLORS["grey_text"]};">'
-                f'{status_badge} &nbsp;·&nbsp; {n_subs} submissions &nbsp;·&nbsp; {marks} pts'
+                f'<span style="font-size:0.85rem;color:#555555;display:flex;'
+                f'align-items:center;gap:0.6rem;">'
+                f'{pill_html}'
+                f'<span>{n_subs} submissions &nbsp;·&nbsp; {marks} pts</span>'
                 f'</span>'
                 f'</div>',
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
             with st.container():
@@ -320,10 +356,9 @@ with tabs[1]:
                     '<div style="background:#FFFFFF;border:1.5px solid #E0E0E0;'
                     'border-top:none;border-radius:0 0 8px 8px;'
                     'padding:0.8rem 1rem;margin-bottom:0.3rem;">',
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
 
-                # ── Main row fields ────────────────────────────────────────────
                 col_en, col_title, col_od, col_ot, col_dd, col_dt, col_save = \
                     st.columns([1, 3, 2, 1.5, 2, 1.5, 1])
 
@@ -331,137 +366,151 @@ with tabs[1]:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">ENABLED</div>',
-                        unsafe_allow_html=True)
+                        unsafe_allow_html=True,
+                    )
                     new_en = st.checkbox(
-                        "On", value=enabled, key=f"en_{hw_id}",
-                        label_visibility="collapsed")
+                        "On", value=enabled,
+                        key=f"en_{hw_id}",
+                        label_visibility="collapsed",
+                    )
 
                 with col_title:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">TITLE</div>',
-                        unsafe_allow_html=True)
+                        unsafe_allow_html=True,
+                    )
                     new_title = st.text_input(
                         "Title", value=title,
                         key=f"title_{hw_id}",
-                        label_visibility="collapsed")
+                        label_visibility="collapsed",
+                    )
 
                 with col_od:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">OPENS (date)</div>',
-                        unsafe_allow_html=True)
+                        unsafe_allow_html=True,
+                    )
                     op_date_val = op_dt.date() if op_dt else None
                     new_op_date = st.date_input(
                         "Open date", value=op_date_val,
                         key=f"od_{hw_id}",
-                        label_visibility="collapsed")
+                        label_visibility="collapsed",
+                    )
 
                 with col_ot:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">OPENS (time)</div>',
-                        unsafe_allow_html=True)
+                        unsafe_allow_html=True,
+                    )
                     op_time_val = op_dt.time() if op_dt else datetime.time(0, 0)
                     new_op_time = st.time_input(
                         "Open time", value=op_time_val,
                         key=f"ot_{hw_id}",
-                        label_visibility="collapsed")
+                        label_visibility="collapsed",
+                    )
 
                 with col_dd:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">DEADLINE (date)</div>',
-                        unsafe_allow_html=True)
-                    dl_date_val = (dl_dt.date()
-                                   if dl_dt and not is_placeholder
-                                   else datetime.date.today() +
-                                   datetime.timedelta(days=14))
+                        unsafe_allow_html=True,
+                    )
+                    dl_date_val = (
+                        dl_dt.date()
+                        if dl_dt and not is_placeholder
+                        else datetime.date.today() + datetime.timedelta(days=14)
+                    )
                     new_dl_date = st.date_input(
                         "Deadline date", value=dl_date_val,
                         key=f"dd_{hw_id}",
-                        label_visibility="collapsed")
+                        label_visibility="collapsed",
+                    )
 
                 with col_dt:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">DEADLINE (time)</div>',
-                        unsafe_allow_html=True)
-                    dl_time_val = (dl_dt.time()
-                                   if dl_dt and not is_placeholder
-                                   else datetime.time(23, 59))
+                        unsafe_allow_html=True,
+                    )
+                    dl_time_val = (
+                        dl_dt.time()
+                        if dl_dt and not is_placeholder
+                        else datetime.time(23, 59)
+                    )
                     new_dl_time = st.time_input(
                         "Deadline time", value=dl_time_val,
                         key=f"dt_{hw_id}",
-                        label_visibility="collapsed")
+                        label_visibility="collapsed",
+                    )
 
                 with col_save:
                     st.markdown(
                         '<div style="font-size:0.75rem;color:#555;'
                         'font-weight:600;margin-bottom:0.3rem;">&nbsp;</div>',
-                        unsafe_allow_html=True)
+                        unsafe_allow_html=True,
+                    )
                     save_clicked = st.button(
                         "Save", key=f"save_{hw_id}",
-                        use_container_width=True)
+                        use_container_width=True,
+                    )
 
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                # ── Save logic ─────────────────────────────────────────────────
+                # ── Save logic ──
                 if save_clicked:
-                    errors = []
-                    new_dl_str = (f"{new_dl_date.strftime('%Y-%m-%d')} "
-                                  f"{new_dl_time.strftime('%H:%M')}")
-                    new_dl_dt  = datetime.datetime.strptime(
-                        new_dl_str, "%Y-%m-%d %H:%M")
-
-                    # Opening date string
-                    if new_op_date:
-                        new_op_str = (f"{new_op_date.strftime('%Y-%m-%d')} "
-                                      f"{new_op_time.strftime('%H:%M')}")
-                    else:
-                        new_op_str = ""
-
-                    # Warnings
+                    new_dl_str = (
+                        f"{new_dl_date.strftime('%Y-%m-%d')} "
+                        f"{new_dl_time.strftime('%H:%M')}"
+                    )
+                    new_dl_dt = datetime.datetime.strptime(
+                        new_dl_str, "%Y-%m-%d %H:%M"
+                    )
+                    new_op_str = (
+                        f"{new_op_date.strftime('%Y-%m-%d')} "
+                        f"{new_op_time.strftime('%H:%M')}"
+                        if new_op_date else ""
+                    )
                     if new_dl_dt < datetime.datetime.now():
                         st.warning(
                             f"⚠ Deadline {new_dl_str} is in the past — "
-                            f"homework will close immediately.")
-                    if (not new_en and n_subs > 0 and
-                            enabled != new_en):
+                            f"homework will close immediately."
+                        )
+                    if not new_en and n_subs > 0 and enabled != new_en:
                         st.warning(
                             f"⚠ {n_subs} submissions exist. "
-                            f"Disabling will hide this homework from students.")
+                            f"Disabling will hide this homework from students."
+                        )
+                    update_hw_config(hw_id, "Enabled",      str(new_en).upper())
+                    update_hw_config(hw_id, "Title",         new_title.strip())
+                    update_hw_config(hw_id, "Deadline",      new_dl_str)
+                    update_hw_config(hw_id, "Opening_Date",  new_op_str)
+                    log_audit("instructor", "HW_UPDATED", hw_id)
+                    st.success(f"✓ {hw_id} saved.")
+                    st.rerun()
 
-                    if not errors:
-                        update_hw_config(hw_id, "Enabled",
-                                         str(new_en).upper())
-                        update_hw_config(hw_id, "Title", new_title.strip())
-                        update_hw_config(hw_id, "Deadline", new_dl_str)
-                        update_hw_config(hw_id, "Opening_Date", new_op_str)
-                        log_audit("instructor", "HW_UPDATED", hw_id)
-                        st.success(f"✓ {hw_id} saved.")
-                        st.rerun()
-
-                # ── Details panel (announcement, instructions, grace) ──────────
+                # ── Details panel ──
                 with st.expander(
-                        f"Details — {title} (announcement, instructions, grace period)",
-                        expanded=False):
-
+                    f"Details — {title} (announcement, instructions, grace period)",
+                    expanded=False,
+                ):
                     new_ann = st.text_input(
                         "Announcement (shown to students on dashboard)",
-                        value=ann, key=f"ann_{hw_id}")
-
+                        value=ann, key=f"ann_{hw_id}",
+                    )
                     new_instr = st.text_area(
                         "Instructions (shown at top of homework page)",
-                        value=instr, key=f"instr_{hw_id}", height=80)
+                        value=instr, key=f"instr_{hw_id}", height=80,
+                    )
                     st.caption(f"{len(new_instr)} / 500 characters")
-
                     new_gr = st.number_input(
                         "Grace period (minutes after deadline)",
                         value=int(grace or 15),
                         min_value=0, max_value=120,
-                        key=f"gr_{hw_id}")
-
+                        key=f"gr_{hw_id}",
+                    )
                     if st.button("Save details", key=f"save_det_{hw_id}",
                                  use_container_width=True):
                         update_hw_config(hw_id, "Announcement", new_ann)
@@ -470,34 +519,34 @@ with tabs[1]:
                         log_audit("instructor", "HW_DETAILS", hw_id)
                         st.success("Details saved.")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.divider()
 
 
 # ════════════════════════════════════════════════════════════════════════════════
 #  TAB 3 — STUDENTS
 # ════════════════════════════════════════════════════════════════════════════════
 with tabs[2]:
-    st.markdown('<div class="sec">Enrolled Students</div>',
-                unsafe_allow_html=True)
+    section_header("Enrolled Students", "👥")
+
     if st.button("↻ Refresh", key="ref_stu"):
         st.rerun()
 
-    students = get_all_students()
+    students = get_all_students() or []
     if students:
-        df_s  = pd.DataFrame(students)
-        show  = [c for c in ["Email", "First_Name", "Last_Name",
-                              "Registered_At", "Last_Login"]
-                 if c in df_s.columns]
+        df_s = pd.DataFrame(students)
+        show = [c for c in ["Email", "First_Name", "Last_Name",
+                             "Registered_At", "Last_Login"]
+                if c in df_s.columns]
         st.dataframe(df_s[show], use_container_width=True)
         st.caption(f"{len(students)} enrolled")
 
-        st.markdown('<div class="sec">Student Actions</div>',
-                    unsafe_allow_html=True)
+        section_header("Student Actions", "⚡")
         sel_s = st.selectbox(
             "Select student",
             [s.get("Email", "") for s in students],
-            key="sel_s"
+            key="sel_s",
         )
+
         cA, cB, cC = st.columns(3)
 
         with cA:
@@ -528,26 +577,36 @@ with tabs[2]:
                     st.error("Min 8 characters.")
 
         with cC:
-            if st.button("Remove student", key="del_s"):
-                if st.checkbox("Confirm removal", key="del_conf"):
-                    if delete_student(sel_s):
-                        log_audit("instructor", "STU_DEL", sel_s)
-                        st.success("Removed.")
-                        st.rerun()
+            st.markdown(
+                '<div style="font-size:0.82rem;color:#DC2626;'
+                'font-weight:600;margin-bottom:0.4rem;">⚠ Destructive action</div>',
+                unsafe_allow_html=True,
+            )
+            confirm_del = st.checkbox(
+                f'Confirm removal of {sel_s}',
+                key="del_conf",
+            )
+            if st.button("Remove student", key="del_s", disabled=not confirm_del):
+                if delete_student(sel_s):
+                    log_audit("instructor", "STU_DEL", sel_s)
+                    st.success("Removed.")
+                    st.rerun()
+                else:
+                    st.error("Failed to remove student.")
 
-        st.markdown('<div class="sec">Preview as Student</div>',
-                    unsafe_allow_html=True)
+        section_header("Preview as Student", "👁")
         st.caption("See the app exactly as this student sees it.")
         prev_em = st.selectbox(
             "Preview as",
             [s.get("Email", "") for s in students],
-            key="prev_em"
+            key="prev_em",
         )
         if st.button("Enter preview mode", key="enter_prev"):
             stu = next(
                 (s for s in students
                  if s.get("Email", "").strip().lower() ==
-                 prev_em.strip().lower()), {}
+                 prev_em.strip().lower()),
+                {},
             )
             st.session_state["authenticated"]  = True
             st.session_state["student_email"]  = prev_em.strip().lower()
@@ -557,28 +616,36 @@ with tabs[2]:
             )
             st.session_state["student_record"] = stu
             st.session_state["submissions"]    = get_student_submissions(
-                prev_em.strip().lower())
+                prev_em.strip().lower()
+            )
             st.session_state["hw_configs"]     = get_homework_configs()
             st.session_state["preview_mode"]   = True
             log_audit("instructor", "PREVIEW", prev_em)
             st.switch_page("pages/Dashboard.py")
 
         csv = df_s[show].to_csv(index=False).encode("utf-8")
-        st.download_button("⬇ Download student list",
-                           csv, "students.csv", "text/csv", key="dl_stu")
+        st.download_button(
+            "⬇ Download student list",
+            csv, "students.csv", "text/csv", key="dl_stu",
+        )
     else:
         st.info("No students enrolled yet.")
 
-    st.markdown('<div class="sec">Bulk Enroll</div>', unsafe_allow_html=True)
-    st.caption("One email per line. Registered with TempPass123, "
-               "forced to reset on first login.")
+    st.divider()
+    section_header("Bulk Enroll", "📥")
+    st.caption(
+        "One email per line. Registered with TempPass123, "
+        "forced to reset on first login."
+    )
     bulk_txt = st.text_area(
         "Email list", height=100, key="bulk_em",
-        placeholder="student1@uni.edu\nstudent2@uni.edu")
+        placeholder="student1@uni.edu\nstudent2@uni.edu",
+    )
     if st.button("Bulk Enroll", key="bulk_go"):
         if bulk_txt.strip():
-            email_list = [e.strip() for e in bulk_txt.strip().splitlines()
-                          if e.strip()]
+            email_list = [
+                e.strip() for e in bulk_txt.strip().splitlines() if e.strip()
+            ]
             with st.spinner(f"Enrolling {len(email_list)}..."):
                 added, skipped, errors = bulk_register(email_list)
             if added:
@@ -596,8 +663,11 @@ with tabs[2]:
 #  TAB 4 — SETTINGS
 # ════════════════════════════════════════════════════════════════════════════════
 with tabs[3]:
-    st.markdown('<div class="sec">Change Instructor Password</div>',
-                unsafe_allow_html=True)
+    col_left, col_right = st.columns([3, 1])
+    with col_right:
+        dark_mode_toggle()
+
+    section_header("Change Instructor Password", "🔒")
     with st.form("ch_pw"):
         cur  = st.text_input("Current password", type="password")
         new1 = st.text_input("New password",     type="password")
@@ -615,52 +685,92 @@ with tabs[3]:
             log_audit("instructor", "PW_CHANGED", "")
             st.success("Password updated.")
 
-    st.markdown('<div class="sec">Audit Log</div>', unsafe_allow_html=True)
+    st.divider()
+    section_header("End-of-Semester Reset", "⚠️")
+    st.markdown(
+        '<div class="banner banner-warning">⚠ Download all data before proceeding. '
+        'This action cannot be undone.</div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("Reset options"):
+        st.markdown(
+            '<div style="font-size:0.88rem;color:#DC2626;margin-bottom:0.8rem;">'
+            'Both checkboxes must be ticked before the button activates.</div>',
+            unsafe_allow_html=True,
+        )
+        confirm_dl  = st.checkbox("I have downloaded all student data", key="conf_dl")
+        confirm_clr = st.checkbox("I understand this will delete all student accounts",
+                                  key="conf_clr")
+        all_confirmed = confirm_dl and confirm_clr
+
+        if st.button("Clear all student accounts", key="clear_reg",
+                     disabled=not all_confirmed):
+            try:
+                ws = get_tab(TAB_REGISTRY)
+                ws.clear()
+                ws.update("A1", [[
+                    "Email", "Password_Hash", "First_Name",
+                    "Last_Name", "Registered_At",
+                    "Last_Login", "Force_Reset",
+                ]])
+                log_audit("instructor", "REGISTRY_CLEARED", "End of semester")
+                st.success("Registry cleared.")
+            except Exception as e:
+                st.error(str(e))
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+#  TAB 5 — AUDIT
+# ════════════════════════════════════════════════════════════════════════════════
+with tabs[4]:
+    section_header("Audit Log", "🔍")
+    st.caption(
+        "All instructor actions are recorded here. "
+        "Most recent entries shown first."
+    )
+
+    col_ref2, col_dl = st.columns([1, 4])
+    with col_ref2:
+        if st.button("↻ Refresh", key="ref_audit"):
+            st.rerun()
+
     try:
-        ws      = get_tab("Config")
-        vals    = ws.get_all_values()
+        ws    = get_tab("Config")
+        vals  = ws.get_all_values()
         a_start = next(
             (i for i, r in enumerate(vals)
              if len(r) > 0 and r[0] == "Timestamp" and i > 20),
-            None
+            None,
         )
         if a_start is not None:
             data = vals[a_start + 1:]
             if data:
                 df_a = pd.DataFrame(
-                    data, columns=["Timestamp", "Actor", "Action", "Detail"])
-                st.dataframe(df_a.iloc[::-1].reset_index(drop=True),
-                             use_container_width=True)
+                    data, columns=["Timestamp", "Actor", "Action", "Detail"]
+                )
+                df_a = df_a.iloc[::-1].reset_index(drop=True)
+                st.dataframe(df_a, use_container_width=True)
+                with col_dl:
+                    st.download_button(
+                        "⬇ Download audit log CSV",
+                        df_a.to_csv(index=False).encode("utf-8"),
+                        "audit_log.csv", "text/csv", key="dl_audit",
+                    )
             else:
                 st.info("No audit entries yet.")
+        else:
+            st.info("Audit log section not found in Config sheet.")
     except Exception as e:
         st.info(f"Could not load audit log: {e}")
 
-    st.markdown('<div class="sec">End-of-Semester Reset</div>',
-                unsafe_allow_html=True)
-    st.markdown(
-        '<div class="banner banner-warning">⚠ Download all data first.</div>',
-        unsafe_allow_html=True
-    )
-    with st.expander("Reset options"):
-        if st.button("Clear all student accounts", key="clear_reg"):
-            if st.checkbox("I have downloaded all data", key="conf_clr"):
-                try:
-                    ws = get_tab("Registry")
-                    ws.clear()
-                    ws.update("A1", [[
-                        "Email", "Password_Hash", "First_Name",
-                        "Last_Name", "Registered_At",
-                        "Last_Login", "Force_Reset"
-                    ]])
-                    log_audit("instructor", "REGISTRY_CLEARED",
-                              "End of semester")
-                    st.success("Registry cleared.")
-                except Exception as e:
-                    st.error(str(e))
 
-st.markdown("<br>", unsafe_allow_html=True)
-if st.button("Sign out", key="inst_out"):
-    log_audit("instructor", "LOGOUT", "")
-    st.session_state.pop("instructor_auth", None)
-    st.switch_page("Home.py")
+# ── Footer & sign-out ──────────────────────────────────────────────────────────
+st.divider()
+col_so, _ = st.columns([1, 5])
+with col_so:
+    if st.button("Sign out", key="inst_out"):
+        log_audit("instructor", "LOGOUT", "")
+        st.session_state.pop("instructor_auth", None)
+        st.switch_page("Home.py")
+
+page_footer()

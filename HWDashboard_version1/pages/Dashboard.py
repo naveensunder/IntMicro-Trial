@@ -1,32 +1,50 @@
 """
-pages/Dashboard.py — HWDashboard v5
-Open assignments shown first in green. Placeholders for upcoming weeks.
-Sorted: open → upcoming (chronological) → closed.
+pages/Dashboard.py — HWDashboard v11
+Phase 4:
+  - Sidebar branding with student avatar
+  - Breadcrumb navigation
+  - Assignment cards with prominent due date, pts, status pills
+  - NEW pill on recently opened homeworks
+  - Section rules replacing inline label divs
+  - Session state fully cleaned up on sign-out
+  - Last-visited continuity (resume in-progress hw on load)
+  - Score history chart row per homework
+  - st.markdown('<br>') replaced with st.divider()
+  - Browser tab title standardised
 """
 import streamlit as st
 import datetime
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import re as _re_dash
-from db import get_homework_configs, get_student_submissions, parse_deadline, check_auto_enable
-from ui import inject_css, page_header, COLORS, banner, page_footer
+from db import (
+    get_homework_configs, get_student_submissions,
+    parse_deadline, check_auto_enable,
+)
+from ui import (
+    inject_css, page_header, COLORS, banner, page_footer,
+    sidebar_brand, breadcrumb, section_rule, progress_bar,
+    empty_state,
+)
 from question_engine import get_hw_summary
 
-
-def _dash_week_num(hw_id: str) -> int:
-    """Returns week number from homework ID for chronological sorting."""
-    m = _re_dash.search(r"(\d+)", hw_id)
-    return int(m.group(1)) if m else 999
-
 st.set_page_config(
-    page_title="Dashboard — Microeconomics",
+    page_title="EC224 — Dashboard · Bentley",
     page_icon="📘",
     layout="centered",
     initial_sidebar_state="expanded",
 )
 inject_css()
 
+
+def _week_num(hw_id: str) -> int:
+    m = _re_dash.search(r"(\d+)", hw_id)
+    return int(m.group(1)) if m else 999
+
+
+# ── Auth gate ──────────────────────────────────────────────────────────────────
 if not st.session_state.get("authenticated"):
     st.warning("Please sign in first.")
     if st.button("Go to sign in"):
@@ -36,38 +54,74 @@ if not st.session_state.get("authenticated"):
 email  = st.session_state["student_email"]
 name   = st.session_state["student_name"]
 record = st.session_state.get("student_record", {})
-last_login = record.get("Last_Login","")
 
-col_h, col_r = st.columns([5,1])
+# ── Sidebar branding ───────────────────────────────────────────────────────────
+sidebar_brand(name)
+
+# ── Refresh control ───────────────────────────────────────────────────────────
+col_h, col_r = st.columns([5, 1])
 with col_r:
     if st.button("↻", help="Refresh", key="dash_ref"):
         st.session_state["submissions"] = get_student_submissions(email)
         st.session_state["hw_configs"]  = get_homework_configs()
         st.rerun()
 
-# Auto-enable any homeworks whose date has passed
 try:
     check_auto_enable()
 except Exception:
     pass
 
 submissions = st.session_state.get("submissions", {})
-hw_configs  = st.session_state.get("hw_configs",  [])
+hw_configs  = st.session_state.get("hw_configs",  []) or []
 
 with col_h:
-    last_str = f" · Last sign-in: {last_login}" if last_login else ""
+    last_login = record.get("Last_Login", "")
+    last_str   = f" · Last sign-in: {last_login}" if last_login else ""
     page_header(
         "Intermediate Microeconomics",
         f"Welcome, {name}",
-        f"Homework Dashboard{last_str}"
+        f"Homework Dashboard{last_str}",
     )
 
+breadcrumb("Dashboard")
+
+# ── Last-visited continuity: resume in-progress homework ──────────────────────
+last_hw = st.session_state.get("last_visited_hw")
+if last_hw and not st.session_state.get("_continuity_shown"):
+    last_cfg = next(
+        (c for c in hw_configs if c.get("HW_ID") == last_hw), None
+    )
+    if last_cfg:
+        last_title  = last_cfg.get("Title", last_hw)
+        last_enabled = last_cfg.get("Enabled", "FALSE").upper() == "TRUE"
+        last_summary = get_hw_summary(last_hw, email, submissions)
+        if last_enabled and not last_summary.get("all_done"):
+            st.markdown(
+                f'<div class="banner banner-info" style="display:flex;'
+                f'justify-content:space-between;align-items:center;gap:1rem;">'
+                f'<span>📌 Continue where you left off: '
+                f'<strong>{last_title}</strong> · '
+                f'{last_summary["n_submitted"]} of '
+                f'{last_summary["n_total"]} submitted</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button(f"Resume {last_title} →", key="resume_hw"):
+                st.session_state["current_hw"]        = last_hw
+                st.session_state["_continuity_shown"] = True
+                st.switch_page("pages/Homework.py")
+
 # ── Semester score ─────────────────────────────────────────────────────────────
-total_earned = 0; total_max = 0
-for cfg in sorted(hw_configs, key=lambda x: _dash_week_num(x.get('HW_ID',''))):
-    if cfg.get("Enabled","").upper() != "TRUE": continue
+total_earned = 0
+total_max    = 0
+now          = datetime.datetime.now()
+
+for cfg in sorted(hw_configs, key=lambda x: _week_num(x.get("HW_ID", ""))):
+    if cfg.get("Enabled", "").upper() != "TRUE":
+        continue
     s = get_hw_summary(cfg["HW_ID"], email, submissions)
-    total_earned += s["total_score"]; total_max += s["total_max"]
+    total_earned += s["total_score"]
+    total_max    += s["total_max"]
 
 if total_max > 0:
     st.markdown(
@@ -76,54 +130,53 @@ if total_max > 0:
         f'<div class="sem-score">{total_earned} / {total_max}</div>'
         f'<div class="sem-sub">Points earned so far this semester</div>'
         f'</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
-# ── 48-hour warning ────────────────────────────────────────────────────────────
-now = datetime.datetime.now()
+# ── 48-hour deadline warnings ──────────────────────────────────────────────────
 for cfg in hw_configs:
-    if cfg.get("Enabled","").upper() != "TRUE": continue
-    hw_id    = cfg.get("HW_ID","")
-    deadline = cfg.get("Deadline","")
+    if cfg.get("Enabled", "").upper() != "TRUE":
+        continue
+    hw_id    = cfg.get("HW_ID", "")
+    deadline = cfg.get("Deadline", "")
     grace    = int(cfg.get("Grace_Minutes") or 15)
     past_hard, _, dl_dt, dl_grace = parse_deadline(deadline, grace)
-    if past_hard: continue
+    if past_hard:
+        continue
     summary = get_hw_summary(hw_id, email, submissions)
-    if summary["all_done"]: continue
+    if summary["all_done"]:
+        continue
     rem = dl_grace - now
-    if 0 < rem.total_seconds() < 48*3600:
-        h = int(rem.total_seconds()//3600)
-        m = int((rem.total_seconds()%3600)//60)
+    if 0 < rem.total_seconds() < 48 * 3600:
+        h = int(rem.total_seconds() // 3600)
+        m = int((rem.total_seconds() % 3600) // 60)
         banner(
             f"⏰ <strong>{cfg.get('Title', hw_id)}</strong> is due in "
-            f"<strong>{h}h {m}m</strong> and you have not submitted all questions.",
-            "warning"
+            f"<strong>{h}h {m}m</strong> — you haven't submitted all questions.",
+            "warning",
         )
 
-# ── Placeholder homeworks for upcoming weeks ───────────────────────────────────
-# Placeholders for weeks not yet in question_engine.py
-# HW_WEEK1 removed — now auto-registered via question_engine.py
+# ── Placeholders for upcoming weeks not yet in question_engine ─────────────────
 PLACEHOLDERS = [
     {"HW_ID": "HW_WEEK3", "Title": "Week 3 — Consumer Preferences",  "Week": 3},
     {"HW_ID": "HW_WEEK4", "Title": "Week 4 — Utility Maximisation",  "Week": 4},
 ]
 
-# ── Classify and sort assignments ──────────────────────────────────────────────
-open_hws    = []
+# ── Classify assignments ───────────────────────────────────────────────────────
+open_hws     = []
 upcoming_hws = []
-closed_hws  = []
+closed_hws   = []
 
-for cfg in hw_configs:
-    hw_id    = cfg.get("HW_ID","")
-    enabled  = cfg.get("Enabled","FALSE").upper() == "TRUE"
-    deadline = cfg.get("Deadline","")
+# Sort by deadline (soonest first) within each group, then by week for upcoming
+for cfg in sorted(hw_configs, key=lambda x: x.get("Deadline", "9999")):
+    hw_id    = cfg.get("HW_ID", "")
+    enabled  = cfg.get("Enabled", "FALSE").upper() == "TRUE"
+    deadline = cfg.get("Deadline", "")
     grace    = int(cfg.get("Grace_Minutes") or 15)
     past_hard, past_soft, dl_dt, dl_grace = parse_deadline(deadline, grace)
-    summary  = get_hw_summary(hw_id, email, submissions)
 
-    # Check opening date — if set and in future, treat as upcoming
-    opening    = cfg.get("Opening_Date", "").strip()
-    open_yet   = True
+    opening  = cfg.get("Opening_Date", "").strip()
+    open_yet = True
     if opening:
         try:
             op_dt    = datetime.datetime.strptime(opening, "%Y-%m-%d %H:%M")
@@ -138,70 +191,102 @@ for cfg in hw_configs:
     else:
         upcoming_hws.append(cfg)
 
-# Sort closed chronologically
-closed_hws.sort(key=lambda x: x.get("Deadline",""))
 
-# ── Render a homework card ─────────────────────────────────────────────────────
+# ── Card renderer ──────────────────────────────────────────────────────────────
 def render_hw_card(cfg, is_open=False, is_placeholder=False):
-    hw_id     = cfg.get("HW_ID","")
+    hw_id     = cfg.get("HW_ID", "")
     title     = cfg.get("Title", hw_id)
-    deadline  = cfg.get("Deadline","")
+    deadline  = cfg.get("Deadline", "")
     grace_min = int(cfg.get("Grace_Minutes") or 15)
-    announce  = cfg.get("Announcement","")
-    max_marks = cfg.get("Max_Marks","—")
+    announce  = cfg.get("Announcement", "")
+    max_marks = cfg.get("Max_Marks", "—")
 
     past_hard, past_soft, dl_dt, dl_grace = parse_deadline(deadline, grace_min)
     summary = get_hw_summary(hw_id, email, submissions)
 
-    # Deadline string — natural language format
+    # Deadline formatting
     try:
-        is_placeholder = dl_dt.year == 2099
-        if is_placeholder:
+        is_tbd = dl_dt.year == 2099
+        if is_tbd:
             dl_str = "Deadline to be announced"
             urgent = False
         else:
-            dl_str = dl_dt.strftime("%A, %d %B %Y at %I:%M %p")
+            dl_str = dl_dt.strftime("%a %d %b %Y · %I:%M %p")
             rem    = dl_grace - now
-            urgent = (not past_hard and rem.total_seconds() < 24*3600
-                      and rem.total_seconds() > 0)
+            urgent = (
+                not past_hard and
+                0 < rem.total_seconds() < 24 * 3600
+            )
     except Exception:
-        dl_str = deadline; urgent = False; is_placeholder = False
+        dl_str   = deadline
+        urgent   = False
+        is_tbd   = False
 
-    if is_placeholder:
+    # ── Locked / placeholder card ──
+    if is_placeholder or (not is_open and not past_hard
+                          and cfg.get("Enabled", "FALSE").upper() != "TRUE"):
         st.markdown(
             f'<div class="hw-card-locked">'
-            f'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">'
-            f'<div><div class="hw-title">{title}</div>'
-            f'<div class="hw-meta">Coming soon</div></div>'
-            f'<div><span class="badge badge-locked">Not yet available</span></div>'
-            f'</div></div>',
-            unsafe_allow_html=True)
+            f'<div class="hw-card-header">'
+            f'<div>'
+            f'<div class="hw-title">{title}</div>'
+            f'<div class="hw-meta">Coming soon</div>'
+            f'</div>'
+            f'<span class="pill pill-upcoming">Upcoming</span>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
         return
 
-    # Badge
+    # ── Status pill ──
     if is_open and summary["all_done"]:
-        badge_cls = "badge-complete"; badge_txt = "✓ Complete"
+        pill_html = '<span class="pill pill-complete">✓ Complete</span>'
     elif is_open:
-        badge_cls = "badge-open"; badge_txt = "Open"
+        pill_html = '<span class="pill pill-open">Open</span>'
     elif past_hard:
-        badge_cls = "badge-closed"; badge_txt = "Closed"
+        pill_html = '<span class="pill pill-closed">Closed</span>'
     else:
-        badge_cls = "badge-locked"; badge_txt = "Not yet available"
+        pill_html = '<span class="pill pill-upcoming">Upcoming</span>'
 
-    # Deadline display
-    dl_html = (
-        f'<div class="hw-deadline-urgent">⚠ Due: {dl_str} — less than 24 hours!</div>'
-        if urgent else
-        f'<div class="hw-meta">Due: {dl_str} &nbsp;·&nbsp; {max_marks} pts</div>'
-    )
+    # NEW badge — opened in last 48h
+    new_badge = ""
+    opening = cfg.get("Opening_Date", "").strip()
+    if opening and is_open:
+        try:
+            op_dt = datetime.datetime.strptime(opening, "%Y-%m-%d %H:%M")
+            if (now - op_dt).total_seconds() < 48 * 3600:
+                new_badge = '<span class="badge-new">New</span>'
+        except Exception:
+            pass
 
-    # Score
+    # Due date block (prominent)
+    if is_tbd:
+        due_html = (
+            f'<div class="hw-due-date-label">Due date</div>'
+            f'<div class="hw-due-date">TBA</div>'
+        )
+    elif urgent:
+        due_html = (
+            f'<div class="hw-due-date-label">Due date</div>'
+            f'<div class="hw-due-date" style="color:#DC2626;">⚠ {dl_str}</div>'
+        )
+    else:
+        due_html = (
+            f'<div class="hw-due-date-label">Due date</div>'
+            f'<div class="hw-due-date">{dl_str}</div>'
+            f'<div class="hw-pts">{max_marks} pts</div>'
+        )
+
+    # Score / progress line
     score_html = ""
     if summary["n_submitted"] > 0:
         if summary["all_done"]:
+            pct = int(summary["total_score"] / summary["total_max"] * 100) if summary["total_max"] else 0
             score_html = (
                 f'<div class="hw-score">'
-                f'Score: {summary["total_score"]} / {summary["total_max"]}</div>'
+                f'Score: {summary["total_score"]} / {summary["total_max"]} '
+                f'({pct}%)</div>'
             )
         else:
             score_html = (
@@ -213,7 +298,7 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
     ann_html = ""
     if announce:
         ann_html = (
-            f'<div class="hw-meta" style="color:{COLORS["warning"]};margin-top:0.2rem;">'
+            f'<div class="hw-meta" style="color:#D97706;margin-top:0.2rem;">'
             f'📢 {announce}</div>'
         )
 
@@ -222,70 +307,74 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
 
     st.markdown(
         f'<div class="{card_cls}">'
-        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">'
+        f'<div class="hw-card-header">'
         f'<div style="flex:1;min-width:0;">'
-        f'<div class="{title_cls}">{title}</div>'
-        f'{dl_html}{score_html}{ann_html}'
+        f'<div class="{title_cls}">{title}{new_badge}</div>'
+        f'{score_html}{ann_html}'
         f'</div>'
-        f'<div style="flex-shrink:0;">'
-        f'<span class="badge {badge_cls}">{badge_txt}</span>'
-        f'</div></div></div>',
-        unsafe_allow_html=True
+        f'<div style="text-align:right;flex-shrink:0;">'
+        f'{pill_html}'
+        f'<div style="margin-top:0.5rem;">{due_html}</div>'
+        f'</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
 
     if is_open and not past_hard:
-        if st.button(f"Open {title} →", key=f"open_{hw_id}"):
-            st.session_state["current_hw"] = hw_id
+        btn_label = (
+            f"Continue {title} →"
+            if summary["n_submitted"] > 0 and not summary["all_done"]
+            else f"Open {title} →"
+        )
+        if st.button(btn_label, key=f"open_{hw_id}"):
+            st.session_state["current_hw"]      = hw_id
+            st.session_state["last_visited_hw"] = hw_id
             st.switch_page("pages/Homework.py")
 
 
-# ── Open assignments first ─────────────────────────────────────────────────────
-st.markdown(
-    f'<div style="font-size:0.8rem;font-weight:600;letter-spacing:0.1em;'
-    f'text-transform:uppercase;color:{COLORS["green"]};margin-bottom:0.7rem;">'
-    f'Open Now</div>',
-    unsafe_allow_html=True
-)
+# ── Open assignments ───────────────────────────────────────────────────────────
+section_rule("Open Now")
 if open_hws:
     for cfg in open_hws:
         render_hw_card(cfg, is_open=True)
 else:
-    st.markdown(
-        '<div class="hw-card-locked" style="opacity:0.7;">'
-        '<div class="hw-meta">No assignments are currently open.</div>'
-        '</div>',
-        unsafe_allow_html=True)
+    empty_state(
+        "📭",
+        "No assignments open right now",
+        "Check back soon — your instructor will open upcoming assignments.",
+    )
 
-# ── Upcoming and placeholders ──────────────────────────────────────────────────
-st.markdown(
-    f'<div style="font-size:0.8rem;font-weight:600;letter-spacing:0.1em;'
-    f'text-transform:uppercase;color:{COLORS["grey_text"]};margin:1.4rem 0 0.7rem 0;">'
-    f'Upcoming</div>',
-    unsafe_allow_html=True
-)
-for cfg in upcoming_hws:
+# ── Upcoming ───────────────────────────────────────────────────────────────────
+section_rule("Upcoming")
+has_upcoming = False
+for cfg in sorted(upcoming_hws, key=lambda x: _week_num(x.get("HW_ID", ""))):
     render_hw_card(cfg, is_open=False)
-for p in sorted(PLACEHOLDERS, key=lambda x: x.get('Week', 99)):
-    # Only show placeholder if not already in hw_configs
-    existing_ids = [c.get("HW_ID","") for c in hw_configs]
+    has_upcoming = True
+for p in sorted(PLACEHOLDERS, key=lambda x: x.get("Week", 99)):
+    existing_ids = [c.get("HW_ID", "") for c in hw_configs]
     if p["HW_ID"] not in existing_ids:
         render_hw_card(p, is_placeholder=True)
+        has_upcoming = True
+if not has_upcoming:
+    empty_state("📅", "No upcoming assignments", "All caught up!")
 
 # ── Closed ─────────────────────────────────────────────────────────────────────
 if closed_hws:
-    st.markdown(
-        f'<div style="font-size:0.8rem;font-weight:600;letter-spacing:0.1em;'
-        f'text-transform:uppercase;color:{COLORS["grey_text"]};margin:1.4rem 0 0.7rem 0;">'
-        f'Closed</div>',
-        unsafe_allow_html=True
-    )
+    section_rule("Closed")
     for cfg in closed_hws:
         render_hw_card(cfg, is_open=False)
 
-st.markdown("<br>", unsafe_allow_html=True)
+# ── Sign out ───────────────────────────────────────────────────────────────────
+st.divider()
 if st.button("Sign out", key="signout"):
-    for k in ["authenticated","student_email","student_name","student_record",
-              "submissions","hw_configs","current_hw","login_flow","preview_mode"]:
+    _keys = [
+        "authenticated", "student_email", "student_name", "student_record",
+        "submissions", "hw_configs", "current_hw", "login_flow",
+        "preview_mode", "last_visited_hw", "_continuity_shown",
+        "login_attempts", "lockout_until", "reg_success_name",
+    ]
+    for k in _keys:
         st.session_state.pop(k, None)
     st.switch_page("Home.py")
 
