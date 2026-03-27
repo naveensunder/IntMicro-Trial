@@ -22,6 +22,40 @@ from db import (
 )
 from ui import inject_css, COLORS, page_footer, secure_indicator, registration_success
 
+# ── Dynamic navigation based on auth state ────────────────────────────────────
+def _build_nav():
+    """
+    Controls exactly which pages appear in the sidebar.
+    - Not logged in: only Home (login page), no sidebar clutter
+    - Student logged in on Dashboard: Dashboard, Course Materials, FAQ
+    - Student inside Homework: Dashboard, Homework, Course Materials, FAQ
+    - Instructor: full set including Instructor page
+    """
+    authenticated   = st.session_state.get("authenticated", False)
+    instructor_auth = st.session_state.get("instructor_auth", False)
+    in_homework     = bool(st.session_state.get("current_hw"))
+
+    home_page      = st.Page("Home.py",                    title="Sign In",         icon="🔑")
+    dashboard_page = st.Page("pages/Dashboard.py",         title="Dashboard",       icon="📘")
+    homework_page  = st.Page("pages/Homework.py",          title="Homework",        icon="📝")
+    materials_page = st.Page("pages/Course_Materials.py",  title="Course Materials",icon="📁")
+    faq_page       = st.Page("pages/FAQ.py",               title="FAQ",             icon="❓")
+    instructor_page= st.Page("pages/Instructor.py",        title="Instructor",      icon="🔐")
+
+    if instructor_auth:
+        return st.navigation([instructor_page, dashboard_page, materials_page, faq_page],
+                             position="sidebar")
+    elif authenticated and in_homework:
+        return st.navigation([dashboard_page, homework_page, materials_page, faq_page],
+                             position="sidebar")
+    elif authenticated:
+        return st.navigation([dashboard_page, materials_page, faq_page],
+                             position="sidebar")
+    else:
+        return st.navigation([home_page], position="sidebar")
+
+_nav = _build_nav()
+
 st.set_page_config(
     page_title="EC224 — Intermediate Microeconomics · Bentley",
     page_icon="📘",

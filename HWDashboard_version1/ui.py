@@ -852,7 +852,9 @@ body.dark-mode .stApp {
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 500 !important;
     font-size: 1rem !important;
-    padding: 0.55rem 1.5rem !important;
+    padding: 0.4rem 1.2rem !important;
+    white-space: nowrap !important;
+    line-height: 1.4 !important;
     transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease !important;
 }
 .stButton > button:hover {
