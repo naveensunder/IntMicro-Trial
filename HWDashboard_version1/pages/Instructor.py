@@ -638,114 +638,173 @@ with tabs[5]:
     _hws_p  = get_homework_configs() or []
 
     if not _subs_p or not _stus_p:
-        st.info("Not enough data yet.")
+        st.info("Not enough data yet. Check back once students have submitted.")
     else:
-        _df_p = pd.DataFrame(_subs_p)
-        _df_p["Score"]     = pd.to_numeric(_df_p.get("Score",     pd.Series(dtype=str)), errors="coerce")
-        _df_p["Max_Score"] = pd.to_numeric(_df_p.get("Max_Score", pd.Series(dtype=str)), errors="coerce")
-        sub_df = _df_p[_df_p.get("Status", pd.Series(dtype=str)) == "submitted"].copy() if not _df_p.empty else pd.DataFrame()
+        try:
+            _df_p = pd.DataFrame(_subs_p)
+            # Safe column access — never use df.get() which is not dict-like
+            for col in ["Score","Max_Score","Timestamp","Is_Late","Email","Homework_ID","Status"]:
+                if col not in _df_p.columns:
+                    _df_p[col] = None
+            _df_p["Score"]     = pd.to_numeric(_df_p["Score"],     errors="coerce")
+            _df_p["Max_Score"] = pd.to_numeric(_df_p["Max_Score"], errors="coerce")
+            sub_df = _df_p[_df_p["Status"] == "submitted"].copy()
+        except Exception:
+            sub_df = pd.DataFrame()
 
-        all_emails = {str(s.get("Email","")).strip().lower() for s in _stus_p if s.get("Email")}
-        submitted_emails = set(sub_df["Email"].str.lower().unique()) if not sub_df.empty else set()
+        if sub_df.empty:
+            st.info("Not enough data yet. Check back once students have submitted.")
+        else:
+            all_emails = {str(s.get("Email","")).strip().lower() for s in _stus_p if s.get("Email")}
+            submitted_emails = set(sub_df["Email"].str.lower().unique())
 
-        stu_agg = pd.DataFrame()
-        if not sub_df.empty:
-            stu_agg = sub_df.groupby("Email").agg(
-                total_score=("Score",    "sum"),
-                total_max=  ("Max_Score","sum"),
-                n_late=     ("Is_Late",  lambda x: (x=="Yes").sum()),
-                first_ts=   ("Timestamp","min"),
-            ).reset_index()
-            stu_agg["pct"] = (
-                stu_agg["total_score"] / stu_agg["total_max"] * 100
-            ).round(1).where(stu_agg["total_max"]>0, 0)
+            try:
+                stu_agg = sub_df.groupby("Email").agg(
+                    total_score=("Score",    "sum"),
+                    total_max=  ("Max_Score","sum"),
+                    n_late=     ("Is_Late",  lambda x: (x=="Yes").sum()),
+                    first_ts=   ("Timestamp","min"),
+                ).reset_index()
+                stu_agg["pct"] = (
+                    stu_agg["total_score"] / stu_agg["total_max"].replace(0, float("nan")) * 100
+                ).round(1).fillna(0)
+            except Exception:
+                stu_agg = pd.DataFrame()
 
-        # 1. Perfect scorers
-        with st.expander("🏆 Perfect Scorers (100%)", expanded=False):
-            if not stu_agg.empty:
-                perf = stu_agg[stu_agg["pct"]==100][["Email","total_score","total_max","pct"]]
-                st.dataframe(perf, use_container_width=True) if not perf.empty else st.info("None yet.")
-            else: st.info("No data.")
+            MIN_STUDENTS = 2  # minimum before showing any classification
 
-        # 2. Declining trajectory
-        with st.expander("📉 Declining Trajectory (20%+ drop)", expanded=False):
-            if not sub_df.empty and "Homework_ID" in sub_df.columns:
-                hw_seq = sorted(sub_df["Homework_ID"].unique(), key=_week_num)
-                if len(hw_seq) >= 2:
-                    def _pct(em, hw):
-                        r = sub_df[(sub_df["Email"].str.lower()==em)&(sub_df["Homework_ID"]==hw)]
-                        mx = r["Max_Score"].sum()
-                        return r["Score"].sum()/mx*100 if mx>0 else None
-                    dec = []
-                    for em in submitted_emails:
-                        p1 = _pct(em, hw_seq[0]); p2 = _pct(em, hw_seq[-1])
-                        if p1 and p2 and (p1-p2)>=20:
-                            dec.append({"Email":em, f"{hw_seq[0]}%":round(p1,1),
-                                        f"{hw_seq[-1]}%":round(p2,1), "Drop":round(p1-p2,1)})
-                    if dec:
-                        st.dataframe(pd.DataFrame(dec).sort_values("Drop",ascending=False),
-                                     use_container_width=True)
-                    else: st.info("No declining trajectories detected.")
-                else: st.info("Need at least 2 homeworks to detect trends.")
-            else: st.info("No data.")
+            # 1. Perfect scorers
+            with st.expander("🏆 Perfect Scorers (100%)", expanded=False):
+                if stu_agg.empty or len(stu_agg) < MIN_STUDENTS:
+                    st.info("Not enough data yet.")
+                else:
+                    try:
+                        perf = stu_agg[stu_agg["pct"] >= 99.9][["Email","total_score","total_max","pct"]]
+                        if perf.empty:
+                            st.info("No perfect scorers yet.")
+                        else:
+                            st.dataframe(perf, use_container_width=True)
+                    except Exception:
+                        st.info("Not enough data yet.")
 
-        # 3. Consistent late submitters
-        with st.expander("⏰ Consistent Late Submitters (2+ late)", expanded=False):
-            if not stu_agg.empty:
-                late = stu_agg[stu_agg["n_late"]>=2][["Email","n_late","pct"]].rename(
-                    columns={"n_late":"Late Submissions","pct":"Avg Score %"})
-                st.dataframe(late.sort_values("Late Submissions",ascending=False),
-                             use_container_width=True) if not late.empty else st.info("None detected.")
-            else: st.info("No data.")
+            # 2. Declining trajectory
+            with st.expander("📉 Declining Trajectory (20%+ drop)", expanded=False):
+                try:
+                    if sub_df.empty or "Homework_ID" not in sub_df.columns:
+                        st.info("Not enough data yet.")
+                    else:
+                        hw_seq = sorted(sub_df["Homework_ID"].dropna().unique(), key=_week_num)
+                        if len(hw_seq) < 2:
+                            st.info("Need submissions across at least 2 homeworks to detect trends.")
+                        else:
+                            def _pct(em, hw):
+                                r  = sub_df[(sub_df["Email"].str.lower()==em) & (sub_df["Homework_ID"]==hw)]
+                                mx = r["Max_Score"].sum()
+                                return float(r["Score"].sum()) / float(mx) * 100 if mx > 0 else None
+                            dec = []
+                            for em in submitted_emails:
+                                p1 = _pct(em, hw_seq[0])
+                                p2 = _pct(em, hw_seq[-1])
+                                if p1 is not None and p2 is not None and (p1 - p2) >= 20:
+                                    dec.append({"Email": em,
+                                                f"{hw_seq[0]} %": round(p1, 1),
+                                                f"{hw_seq[-1]} %": round(p2, 1),
+                                                "Drop": round(p1 - p2, 1)})
+                            if dec:
+                                st.dataframe(pd.DataFrame(dec).sort_values("Drop", ascending=False),
+                                             use_container_width=True)
+                            else:
+                                st.info("No declining trajectories detected.")
+                except Exception:
+                    st.info("Not enough data yet.")
 
-        # 5. Score distribution per homework
-        with st.expander("📊 Score Distribution per Homework", expanded=False):
-            if not sub_df.empty and "Homework_ID" in sub_df.columns:
-                for hid in sorted(sub_df["Homework_ID"].unique(), key=_week_num):
-                    hw_t = next((c.get("Title",hid) for c in _hws_p if c.get("HW_ID")==hid), hid)
-                    hw_r = sub_df[sub_df["Homework_ID"]==hid]
-                    sc_r = hw_r.groupby("Email")["Score"].sum()
-                    st.markdown(f"**{hw_t}** — {len(sc_r)} students")
-                    if not sc_r.empty:
-                        st.bar_chart(sc_r.value_counts().sort_index())
-            else: st.info("No data.")
+            # 3. Consistent late submitters
+            with st.expander("⏰ Consistent Late Submitters (2+ late)", expanded=False):
+                if stu_agg.empty or len(stu_agg) < MIN_STUDENTS:
+                    st.info("Not enough data yet.")
+                else:
+                    try:
+                        late = stu_agg[stu_agg["n_late"] >= 2][["Email","n_late","pct"]].rename(
+                            columns={"n_late": "Late Submissions", "pct": "Avg Score %"})
+                        if late.empty:
+                            st.info("No consistent late submitters detected.")
+                        else:
+                            st.dataframe(late.sort_values("Late Submissions", ascending=False),
+                                         use_container_width=True)
+                    except Exception:
+                        st.info("Not enough data yet.")
 
-        # 6. Never submitted
-        with st.expander("👻 Never Submitted", expanded=False):
-            never = all_emails - submitted_emails
-            if never:
-                st.dataframe(pd.DataFrame({"Email": sorted(never)}), use_container_width=True)
-            else:
-                st.success("All enrolled students have submitted at least once.")
+            # 5. Score distribution per homework
+            with st.expander("📊 Score Distribution per Homework", expanded=False):
+                try:
+                    if sub_df.empty or "Homework_ID" not in sub_df.columns:
+                        st.info("Not enough data yet.")
+                    else:
+                        for hid in sorted(sub_df["Homework_ID"].dropna().unique(), key=_week_num):
+                            hw_t = next((c.get("Title", hid) for c in _hws_p if c.get("HW_ID")==hid), hid)
+                            hw_r = sub_df[sub_df["Homework_ID"] == hid]
+                            sc_r = hw_r.groupby("Email")["Score"].sum()
+                            if len(sc_r) < MIN_STUDENTS:
+                                st.markdown(f"**{hw_t}** — not enough data yet.")
+                            else:
+                                st.markdown(f"**{hw_t}** — {len(sc_r)} students")
+                                st.bar_chart(sc_r.value_counts().sort_index())
+                except Exception:
+                    st.info("Not enough data yet.")
 
-        # 7. Grace period dependents
-        with st.expander("🔔 Grace Period Dependents (2+ grace submissions)", expanded=False):
-            if not sub_df.empty and "Is_Late" in sub_df.columns:
-                gdf = sub_df[sub_df["Is_Late"]=="Yes"].groupby("Email").size().reset_index()
-                gdf.columns = ["Email","Grace Submissions"]
-                gdf = gdf[gdf["Grace Submissions"]>=2]
-                st.dataframe(gdf.sort_values("Grace Submissions",ascending=False),
-                             use_container_width=True) if not gdf.empty else st.info("None detected.")
-            else: st.info("No data.")
+            # 6. Never submitted
+            with st.expander("👻 Never Submitted", expanded=False):
+                try:
+                    never = all_emails - submitted_emails
+                    if not all_emails:
+                        st.info("Not enough data yet.")
+                    elif never:
+                        st.dataframe(pd.DataFrame({"Email": sorted(never)}), use_container_width=True)
+                    else:
+                        st.success("All enrolled students have submitted at least once.")
+                except Exception:
+                    st.info("Not enough data yet.")
 
-        # 8. Fastest vs slowest
-        with st.expander("⚡ Fastest vs Slowest Submitters", expanded=False):
-            if not stu_agg.empty:
-                timing = stu_agg[["Email","first_ts"]].copy().dropna()
-                timing["first_ts"] = pd.to_datetime(timing["first_ts"], errors="coerce")
-                timing = timing.dropna().sort_values("first_ts")
-                if not timing.empty:
-                    c_f, c_s = st.columns(2)
-                    with c_f:
-                        st.markdown("**Earliest (top 5)**")
-                        st.dataframe(timing.head(5).rename(columns={"first_ts":"First Submission"}),
-                                     use_container_width=True)
-                    with c_s:
-                        st.markdown("**Latest (bottom 5)**")
-                        st.dataframe(timing.tail(5).rename(columns={"first_ts":"First Submission"}),
-                                     use_container_width=True)
-                else: st.info("No timestamp data.")
-            else: st.info("No data.")
+            # 7. Grace period dependents
+            with st.expander("🔔 Grace Period Dependents (2+ grace submissions)", expanded=False):
+                try:
+                    if sub_df.empty or "Is_Late" not in sub_df.columns:
+                        st.info("Not enough data yet.")
+                    else:
+                        gdf = sub_df[sub_df["Is_Late"] == "Yes"].groupby("Email").size().reset_index()
+                        gdf.columns = ["Email", "Grace Submissions"]
+                        gdf = gdf[gdf["Grace Submissions"] >= 2]
+                        if gdf.empty:
+                            st.info("No grace period dependents detected.")
+                        else:
+                            st.dataframe(gdf.sort_values("Grace Submissions", ascending=False),
+                                         use_container_width=True)
+                except Exception:
+                    st.info("Not enough data yet.")
+
+            # 8. Fastest vs slowest
+            with st.expander("⚡ Fastest vs Slowest Submitters", expanded=False):
+                try:
+                    if stu_agg.empty or len(stu_agg) < MIN_STUDENTS:
+                        st.info("Not enough data yet.")
+                    else:
+                        timing = stu_agg[["Email","first_ts"]].copy().dropna()
+                        timing["first_ts"] = pd.to_datetime(timing["first_ts"], errors="coerce")
+                        timing = timing.dropna().sort_values("first_ts")
+                        if len(timing) < MIN_STUDENTS:
+                            st.info("Not enough data yet.")
+                        else:
+                            c_f, c_s = st.columns(2)
+                            with c_f:
+                                st.markdown("**Earliest submitters (top 5)**")
+                                st.dataframe(timing.head(5).rename(columns={"first_ts": "First Submission"}),
+                                             use_container_width=True)
+                            with c_s:
+                                st.markdown("**Latest submitters (bottom 5)**")
+                                st.dataframe(timing.tail(5).rename(columns={"first_ts": "First Submission"}),
+                                             use_container_width=True)
+                except Exception:
+                    st.info("Not enough data yet.")
 
 
 # ════════════════════════════════════════════════════════════════════════════════

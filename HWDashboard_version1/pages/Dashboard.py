@@ -333,7 +333,7 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
     if is_open and not past_hard:
         action_word = "Continue" if summary["n_submitted"] > 0 and not summary["all_done"] else "Open"
         btn_label   = f"{action_word} Week {short_num} →"
-        col_btn, col_sp = st.columns([1, 4])
+        col_btn, col_sp = st.columns([1.4, 3.6])
         with col_btn:
             if st.button(btn_label, key=f"open_{hw_id}"):
                 st.session_state["current_hw"]      = hw_id
