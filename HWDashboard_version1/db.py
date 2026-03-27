@@ -1,6 +1,10 @@
 """
 db.py — Google Sheets operations.
-HWDashboard v3 — stability-first build.
+HWDashboard v11 — Phase 2:
+  - cache get_homework_configs() 60s + auto-invalidation on write
+  - retry-with-backoff on all Sheets calls
+  - module-level connection pool singleton
+  - AuditSubmissions sheet (write-only attempt log)
 """
 
 import streamlit as st
@@ -10,25 +14,68 @@ import hashlib
 import datetime
 import secrets
 import string
+import time
+import functools
 
-TAB_REGISTRY    = "Registry"
-TAB_SUBMISSIONS = "Submissions"
-TAB_CONFIG      = "Config"
+TAB_REGISTRY          = "Registry"
+TAB_SUBMISSIONS       = "Submissions"
+TAB_CONFIG            = "Config"
+TAB_AUDIT_SUBMISSIONS = "AuditSubmissions"
 
 SHEET_ID = "1QQHk9bf9kC-35im2mswvUwSTymnb4rCv1yYLgbfu9xA"
 
-REGISTRY_HEADER    = ["Email","Password_Hash","First_Name","Last_Name",
-                       "Registered_At","Last_Login","Force_Reset"]
-SUBMISSIONS_HEADER = ["Timestamp","Email","Homework_ID","Question_ID",
-                       "Question_Type","Status","Is_Late","Raw_Answer",
-                       "Score","Max_Score","Correct_Answer"]
-HW_CONFIG_HEADER   = ["HW_ID","Title","Enabled","Deadline",
-                       "Grace_Minutes","Announcement","Max_Marks","Instructions",
-                       "Opening_Date"]
-AUDIT_HEADER       = ["Timestamp","Actor","Action","Detail"]
+REGISTRY_HEADER    = ["Email", "Password_Hash", "First_Name", "Last_Name",
+                       "Registered_At", "Last_Login", "Force_Reset"]
+SUBMISSIONS_HEADER = ["Timestamp", "Email", "Homework_ID", "Question_ID",
+                       "Question_Type", "Status", "Is_Late", "Raw_Answer",
+                       "Score", "Max_Score", "Correct_Answer"]
+HW_CONFIG_HEADER   = ["HW_ID", "Title", "Enabled", "Deadline",
+                       "Grace_Minutes", "Announcement", "Max_Marks",
+                       "Instructions", "Opening_Date"]
+AUDIT_HEADER             = ["Timestamp", "Actor", "Action", "Detail"]
+AUDIT_SUBMISSIONS_HEADER = ["Timestamp", "Email", "Homework_ID",
+                             "Question_ID", "Raw_Answer", "Score",
+                             "Max_Score", "Status"]
 
 
-# ── Connection ─────────────────────────────────────────────────────────────────
+# ── Retry decorator ────────────────────────────────────────────────────────────
+def _with_retry(max_attempts=4, base_delay=1.5):
+    """
+    Exponential backoff decorator for Sheets API calls.
+    Retries on gspread.exceptions.APIError (quota/transient errors).
+    Returns None on exhaustion rather than raising, so callers degrade
+    gracefully.
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            delay = base_delay
+            for attempt in range(max_attempts):
+                try:
+                    return fn(*args, **kwargs)
+                except gspread.exceptions.APIError as e:
+                    status = getattr(e, "response", None)
+                    code   = status.status_code if status else 0
+                    # 429 = quota, 5xx = transient server error
+                    if code in (429, 500, 502, 503) and attempt < max_attempts - 1:
+                        time.sleep(delay)
+                        delay *= 2
+                        continue
+                    # Non-retriable API error — return None
+                    return None
+                except Exception:
+                    # Network / auth errors — retry once then give up
+                    if attempt < max_attempts - 1:
+                        time.sleep(delay)
+                        delay *= 2
+                        continue
+                    return None
+            return None
+        return wrapper
+    return decorator
+
+
+# ── Connection pool (singleton) ────────────────────────────────────────────────
 @st.cache_resource(ttl=300)
 def _get_gc():
     creds = Credentials.from_service_account_info(
@@ -41,10 +88,20 @@ def _get_gc():
     return gspread.authorize(creds)
 
 
-def get_spreadsheet():
+@st.cache_resource(ttl=300)
+def _get_spreadsheet():
+    """
+    Module-level spreadsheet handle cached for 5 minutes.
+    Single open_by_key call shared across all tab lookups.
+    """
     return _get_gc().open_by_key(SHEET_ID)
 
 
+def get_spreadsheet():
+    return _get_spreadsheet()
+
+
+@_with_retry()
 def get_tab(name: str):
     sh = get_spreadsheet()
     try:
@@ -60,22 +117,23 @@ def init_sheets():
 
     def ensure(name, header):
         if name not in existing:
-            ws = sh.add_worksheet(title=name, rows=2000, cols=len(header)+2)
+            ws = sh.add_worksheet(title=name, rows=2000, cols=len(header) + 2)
             ws.update("A1", [header])
         else:
             ws = sh.worksheet(name)
-            if not ws.cell(1,1).value:
+            if not ws.cell(1, 1).value:
                 ws.update("A1", [header])
 
-    ensure(TAB_REGISTRY,    REGISTRY_HEADER)
-    ensure(TAB_SUBMISSIONS, SUBMISSIONS_HEADER)
+    ensure(TAB_REGISTRY,          REGISTRY_HEADER)
+    ensure(TAB_SUBMISSIONS,       SUBMISSIONS_HEADER)
+    ensure(TAB_AUDIT_SUBMISSIONS, AUDIT_SUBMISSIONS_HEADER)
 
     if TAB_CONFIG not in existing:
         ws = sh.add_worksheet(title=TAB_CONFIG, rows=500, cols=15)
-        ws.update("A1",  [["Key","Value"]])
+        ws.update("A1",  [["Key", "Value"]])
         ws.update("A2",  [
-            ["enrollment_key",         _gen_key()],
-            ["enrollment_key_created", datetime.datetime.now().strftime("%Y-%m-%d")],
+            ["enrollment_key",           _gen_key()],
+            ["enrollment_key_created",   datetime.datetime.now().strftime("%Y-%m-%d")],
             ["instructor_password_hash", hash_pw("Microeconomics")],
         ])
         ws.update("A10", [HW_CONFIG_HEADER])
@@ -86,32 +144,35 @@ def init_sheets():
             "2027-04-30 23:59",
             "15", "", "18",
             "This homework covers budget constraints, optimal bundles, "
-            "and utility maximisation with different preference types."
+            "and utility maximisation with different preference types.",
+            "",
         ]])
         ws.update("A30", [AUDIT_HEADER])
     else:
-        # Repair if empty
         ws   = sh.worksheet(TAB_CONFIG)
         rows = ws.get_all_values()
-        has_key = any(len(r)>0 and r[0]=="enrollment_key" for r in rows)
+        has_key = any(len(r) > 0 and r[0] == "enrollment_key" for r in rows)
         if not has_key:
-            ws.update("A1", [["Key","Value"]])
+            ws.update("A1", [["Key", "Value"]])
             ws.update("A2", [
-                ["enrollment_key",         _gen_key()],
-                ["enrollment_key_created", datetime.datetime.now().strftime("%Y-%m-%d")],
+                ["enrollment_key",           _gen_key()],
+                ["enrollment_key_created",   datetime.datetime.now().strftime("%Y-%m-%d")],
                 ["instructor_password_hash", hash_pw("Microeconomics")],
             ])
-        has_hw = any(len(r)>0 and r[0]=="HW_ID" for r in rows)
+        has_hw = any(len(r) > 0 and r[0] == "HW_ID" for r in rows)
         if not has_hw:
             ws.update("A10", [HW_CONFIG_HEADER])
             ws.update("A11", [[
                 "HW_WEEK2",
                 "Week 2 — Budget Constraints & Optimal Bundles",
                 "TRUE", "2027-04-30 23:59", "15", "", "18",
-                "This homework covers budget constraints and utility maximisation."
+                "This homework covers budget constraints and utility maximisation.",
+                "",
             ]])
-        has_audit = any(len(r)>0 and r[0]=="Timestamp" and i>20
-                        for i,r in enumerate(rows))
+        has_audit = any(
+            len(r) > 0 and r[0] == "Timestamp" and i > 20
+            for i, r in enumerate(rows)
+        )
         if not has_audit:
             ws.update("A30", [AUDIT_HEADER])
 
@@ -120,20 +181,28 @@ def init_sheets():
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.strip().encode()).hexdigest()
 
+
 def verify_pw(pw: str, hashed: str) -> bool:
     return hash_pw(pw) == hashed
 
+
 def _gen_key(n=10) -> str:
-    return "".join(secrets.choice(string.ascii_uppercase+string.digits)
-                   for _ in range(n))
+    return "".join(
+        secrets.choice(string.ascii_uppercase + string.digits)
+        for _ in range(n)
+    )
 
 
 # ── Enrollment key ─────────────────────────────────────────────────────────────
+@_with_retry()
 def get_enrollment_key() -> str:
     try:
         ws   = get_tab(TAB_CONFIG)
         rows = ws.get_all_values()
-        key  = next((r[1] for r in rows if len(r)>=2 and r[0]=="enrollment_key"), None)
+        key  = next(
+            (r[1] for r in rows if len(r) >= 2 and r[0] == "enrollment_key"),
+            None
+        )
         return key or "ERROR"
     except Exception:
         return "ERROR"
@@ -143,9 +212,9 @@ def _set_config(key: str, value: str):
     try:
         ws   = get_tab(TAB_CONFIG)
         rows = ws.get_all_values()
-        for i,r in enumerate(rows):
-            if len(r)>=1 and r[0]==key:
-                ws.update_cell(i+1, 2, value)
+        for i, r in enumerate(rows):
+            if len(r) >= 1 and r[0] == key:
+                ws.update_cell(i + 1, 2, value)
                 return
         ws.append_row([key, value])
     except Exception:
@@ -153,6 +222,7 @@ def _set_config(key: str, value: str):
 
 
 # ── Registry ───────────────────────────────────────────────────────────────────
+@_with_retry()
 def get_all_students() -> list:
     try:
         return get_tab(TAB_REGISTRY).get_all_records()
@@ -162,53 +232,60 @@ def get_all_students() -> list:
 
 def get_student(email: str) -> dict:
     email = email.strip().lower()
-    for s in get_all_students():
-        if str(s.get("Email","")).strip().lower() == email:
+    for s in (get_all_students() or []):
+        if str(s.get("Email", "")).strip().lower() == email:
             return s
     return {}
 
 
+@_with_retry()
 def register_student(email: str, password: str,
                      first: str, last: str) -> tuple:
     try:
         if get_student(email):
             return False, "An account with this email already exists."
         ws = get_tab(TAB_REGISTRY)
-        if not ws.cell(1,1).value:
+        if not ws.cell(1, 1).value:
             ws.update("A1", [REGISTRY_HEADER])
-        ts  = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ws.append_row([email.strip().lower(), hash_pw(password),
-                       first.strip(), last.strip(), ts, ts, "FALSE"])
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ws.append_row([
+            email.strip().lower(), hash_pw(password),
+            first.strip(), last.strip(), ts, ts, "FALSE"
+        ])
         return True, ""
     except Exception as e:
         return False, str(e)[:120]
 
 
+@_with_retry()
 def authenticate(email: str, password: str) -> tuple:
     s = get_student(email)
     if not s:
         return False, "No account found with this email."
-    if not verify_pw(password, str(s.get("Password_Hash",""))):
+    if not verify_pw(password, str(s.get("Password_Hash", ""))):
         return False, "Incorrect password."
     try:
         ws   = get_tab(TAB_REGISTRY)
         rows = ws.get_all_values()
-        for i,r in enumerate(rows[1:], start=2):
-            if len(r)>=1 and r[0].strip().lower()==email.strip().lower():
-                ws.update_cell(i, 6,
-                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        for i, r in enumerate(rows[1:], start=2):
+            if len(r) >= 1 and r[0].strip().lower() == email.strip().lower():
+                ws.update_cell(
+                    i, 6,
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                )
                 break
     except Exception:
         pass
     return True, s
 
 
+@_with_retry()
 def update_password(email: str, new_pw: str) -> bool:
     try:
         ws   = get_tab(TAB_REGISTRY)
         rows = ws.get_all_values()
-        for i,r in enumerate(rows[1:], start=2):
-            if len(r)>=1 and r[0].strip().lower()==email.strip().lower():
+        for i, r in enumerate(rows[1:], start=2):
+            if len(r) >= 1 and r[0].strip().lower() == email.strip().lower():
                 ws.update_cell(i, 2, hash_pw(new_pw))
                 ws.update_cell(i, 7, "FALSE")
                 return True
@@ -217,12 +294,13 @@ def update_password(email: str, new_pw: str) -> bool:
     return False
 
 
+@_with_retry()
 def delete_student(email: str) -> bool:
     try:
         ws   = get_tab(TAB_REGISTRY)
         rows = ws.get_all_values()
-        for i,r in enumerate(rows[1:], start=2):
-            if len(r)>=1 and r[0].strip().lower()==email.strip().lower():
+        for i, r in enumerate(rows[1:], start=2):
+            if len(r) >= 1 and r[0].strip().lower() == email.strip().lower():
                 ws.delete_rows(i)
                 return True
     except Exception:
@@ -231,7 +309,7 @@ def delete_student(email: str) -> bool:
 
 
 def bulk_register(emails: list) -> tuple:
-    added=[]; skipped=[]; errors=[]
+    added = []; skipped = []; errors = []
     for email in emails:
         email = email.strip().lower()
         if not email or "@" not in email:
@@ -244,8 +322,8 @@ def bulk_register(emails: list) -> tuple:
             try:
                 ws   = get_tab(TAB_REGISTRY)
                 rows = ws.get_all_values()
-                for i,r in enumerate(rows[1:], start=2):
-                    if len(r)>=1 and r[0].strip().lower()==email:
+                for i, r in enumerate(rows[1:], start=2):
+                    if len(r) >= 1 and r[0].strip().lower() == email:
                         ws.update_cell(i, 7, "TRUE")
                         break
             except Exception:
@@ -256,22 +334,27 @@ def bulk_register(emails: list) -> tuple:
     return added, skipped, errors
 
 
-# ── Homework config ────────────────────────────────────────────────────────────
+# ── Homework config (cached 60s) ───────────────────────────────────────────────
+@st.cache_data(ttl=60)
 def get_homework_configs() -> list:
     try:
-        ws   = get_tab(TAB_CONFIG)
-        rows = ws.get_all_values()
-        start = next((i for i,r in enumerate(rows)
-                      if len(r)>0 and r[0]=="HW_ID"), None)
+        ws    = get_tab(TAB_CONFIG)
+        rows  = ws.get_all_values()
+        start = next(
+            (i for i, r in enumerate(rows) if len(r) > 0 and r[0] == "HW_ID"),
+            None
+        )
         if start is None:
             return []
         header  = rows[start]
         configs = []
-        for r in rows[start+1:]:
-            if not r or not r[0] or r[0] in ["Key","Timestamp","Email"]:
+        for r in rows[start + 1:]:
+            if not r or not r[0] or r[0] in ["Key", "Timestamp", "Email"]:
                 continue
-            cfg = {header[j]: r[j] if j<len(r) else ""
-                   for j in range(len(header))}
+            cfg = {
+                header[j]: r[j] if j < len(r) else ""
+                for j in range(len(header))
+            }
             if cfg.get("HW_ID"):
                 configs.append(cfg)
         return configs
@@ -279,52 +362,55 @@ def get_homework_configs() -> list:
         return []
 
 
+@_with_retry()
 def update_hw_config(hw_id: str, field: str, value: str) -> bool:
     try:
-        ws   = get_tab(TAB_CONFIG)
-        rows = ws.get_all_values()
-        start = next((i for i,r in enumerate(rows)
-                      if len(r)>0 and r[0]=="HW_ID"), None)
+        ws    = get_tab(TAB_CONFIG)
+        rows  = ws.get_all_values()
+        start = next(
+            (i for i, r in enumerate(rows) if len(r) > 0 and r[0] == "HW_ID"),
+            None
+        )
         if start is None:
             return False
         header = rows[start]
         if field not in header:
             return False
-        col = header.index(field)+1
-        for i,r in enumerate(rows[start+1:], start=start+2):
-            if len(r)>0 and r[0]==hw_id:
+        col = header.index(field) + 1
+        for i, r in enumerate(rows[start + 1:], start=start + 2):
+            if len(r) > 0 and r[0] == hw_id:
                 ws.update_cell(i, col, value)
+                # Invalidate cache so next read reflects the change immediately
+                get_homework_configs.clear()
                 return True
     except Exception:
         pass
     return False
 
 
+@_with_retry()
 def add_hw_config(hw_id, title, enabled, deadline,
                   grace, announcement, max_marks, instructions,
                   opening_date="") -> tuple:
-    """
-    Add a new homework config row.
-    Returns (True, "") on success or (False, error_message) on failure.
-    Uses append_row() — most reliable gspread method.
-    """
     try:
         ws = get_tab(TAB_CONFIG)
-        ws.append_row(
-            [hw_id, title, str(enabled), deadline,
-             str(grace), announcement, str(max_marks),
-             instructions, opening_date]
-        )
+        ws.append_row([
+            hw_id, title, str(enabled), deadline,
+            str(grace), announcement, str(max_marks),
+            instructions, opening_date
+        ])
+        get_homework_configs.clear()
         return True, ""
     except Exception as e:
         return False, str(e)[:200]
 
 
 # ── Submissions ────────────────────────────────────────────────────────────────
+@_with_retry()
 def write_submission(row: list) -> tuple:
     try:
         ws = get_tab(TAB_SUBMISSIONS)
-        if not ws.cell(1,1).value:
+        if not ws.cell(1, 1).value:
             ws.update("A1", [SUBMISSIONS_HEADER])
         ws.append_row(row)
         return True, ""
@@ -332,21 +418,23 @@ def write_submission(row: list) -> tuple:
         return False, str(e)[:120]
 
 
+@_with_retry()
 def get_student_submissions(email: str) -> dict:
     result = {}
     try:
         rows = get_tab(TAB_SUBMISSIONS).get_all_records()
         for r in rows:
-            if str(r.get("Email","")).strip().lower()==email.strip().lower():
-                hw = str(r.get("Homework_ID",""))
-                q  = str(r.get("Question_ID",""))
+            if str(r.get("Email", "")).strip().lower() == email.strip().lower():
+                hw = str(r.get("Homework_ID", ""))
+                q  = str(r.get("Question_ID", ""))
                 if hw and q:
-                    result.setdefault(hw,{})[q] = r
+                    result.setdefault(hw, {})[q] = r
     except Exception:
         pass
     return result
 
 
+@_with_retry()
 def get_all_submissions() -> list:
     try:
         return get_tab(TAB_SUBMISSIONS).get_all_records()
@@ -354,12 +442,41 @@ def get_all_submissions() -> list:
         return []
 
 
+# ── Attempt log (AuditSubmissions — write-only) ────────────────────────────────
+@_with_retry()
+def log_submission_attempt(email: str, hw_id: str, question_id: str,
+                           raw_answer: str, score, max_score,
+                           status: str = "submitted"):
+    """
+    Append one row to AuditSubmissions every time a student hits submit.
+    Silent — never raises. Provides an immutable dispute-resolution trail.
+    """
+    try:
+        ws = get_tab(TAB_AUDIT_SUBMISSIONS)
+        if not ws.cell(1, 1).value:
+            ws.update("A1", [AUDIT_SUBMISSIONS_HEADER])
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ws.append_row([
+            ts,
+            str(email).strip().lower(),
+            str(hw_id),
+            str(question_id),
+            str(raw_answer),
+            str(score),
+            str(max_score),
+            str(status),
+        ])
+    except Exception:
+        pass
+
+
 # ── Instructor auth ────────────────────────────────────────────────────────────
+@_with_retry()
 def verify_instructor(pw: str) -> bool:
     try:
         rows = get_tab(TAB_CONFIG).get_all_values()
         for r in rows:
-            if len(r)>=2 and r[0]=="instructor_password_hash":
+            if len(r) >= 2 and r[0] == "instructor_password_hash":
                 return verify_pw(pw, r[1])
     except Exception:
         pass
@@ -373,27 +490,19 @@ def update_instructor_password(new_pw: str) -> bool:
 
 # ── Auto-register homeworks from question_engine ──────────────────────────────
 def auto_register_homeworks(all_hw_configs: dict):
-    """
-    Register any homeworks in question_engine.ALL_HW_CONFIGS that are not
-    yet in the Sheet. Runs on app load. Only writes new rows — never
-    overwrites existing ones. Defaults: disabled, far-future deadline,
-    blank opening date.
-    """
     try:
-        existing = {c.get("HW_ID","") for c in get_homework_configs()}
+        existing = {c.get("HW_ID", "") for c in get_homework_configs()}
         for hw_id, hw_data in all_hw_configs.items():
             if hw_id in existing:
                 continue
-            # Auto-generate title from ID e.g. HW_WEEK1 -> Week 1
             import re as _re
             wm    = _re.search(r"WEEK(\d+)", hw_id)
             title = f"Week {wm.group(1)}" if wm else hw_id
-            marks = sum(q.get("marks",0) for q in hw_data.get("questions",[]))
+            marks = sum(q.get("marks", 0) for q in hw_data.get("questions", []))
             add_hw_config(
                 hw_id, title, "FALSE",
-                "2099-12-31 23:59",  # placeholder deadline
-                "15", "", marks, "",
-                ""                   # blank opening date
+                "2099-12-31 23:59",
+                "15", "", marks, "", ""
             )
     except Exception:
         pass
@@ -401,29 +510,20 @@ def auto_register_homeworks(all_hw_configs: dict):
 
 # ── Gradebook generator ───────────────────────────────────────────────────────
 def generate_gradebook_sheet(all_hw_configs: dict):
-    """
-    Creates or updates a Gradebook tab in the Sheet.
-    Rows = students. Columns = HW_ID + per-homework score/max.
-    Returns (True, n_students) or (False, error_message).
-    """
     try:
         sh       = get_spreadsheet()
         existing = [ws.title for ws in sh.worksheets()]
-
-        # Get all students
         students = get_all_students()
         if not students:
             return False, "No students enrolled."
 
-        # Get all submissions
-        subs = get_all_submissions()
-        # Build lookup: {email: {hw_id: total_score}}
+        subs   = get_all_submissions()
         scores = {}
-        for row in subs:
-            if str(row.get("Status","")) != "submitted":
+        for row in (subs or []):
+            if str(row.get("Status", "")) != "submitted":
                 continue
-            em    = str(row.get("Email","")).strip().lower()
-            hw    = str(row.get("Homework_ID","")).strip()
+            em = str(row.get("Email", "")).strip().lower()
+            hw = str(row.get("Homework_ID", "")).strip()
             try:
                 sc = int(row.get("Score", 0))
             except Exception:
@@ -431,40 +531,33 @@ def generate_gradebook_sheet(all_hw_configs: dict):
             scores.setdefault(em, {})
             scores[em][hw] = scores[em].get(hw, 0) + sc
 
-        # Sort homeworks chronologically
         import re as _re
         def _wn(hid):
             m = _re.search(r"(\d+)", hid)
             return int(m.group(1)) if m else 999
-        hw_ids = sorted(all_hw_configs.keys(), key=_wn)
 
-        # Get max marks per hw
+        hw_ids    = sorted(all_hw_configs.keys(), key=_wn)
         max_marks = {}
-        hw_configs = get_homework_configs()
-        for cfg in hw_configs:
-            hid = cfg.get("HW_ID","")
+        for cfg in (get_homework_configs() or []):
+            hid = cfg.get("HW_ID", "")
             try:
                 max_marks[hid] = int(cfg.get("Max_Marks", 0) or 0)
             except Exception:
                 max_marks[hid] = 0
 
-        # Build header row
         header = ["Email", "First Name", "Last Name"]
         for hid in hw_ids:
             mx = max_marks.get(hid, "?")
             header.append(f"{hid} Score")
             header.append(f"{hid} Max ({mx})")
-        header.append("Total Score")
-        header.append("Total Max")
+        header += ["Total Score", "Total Max"]
 
-        # Build data rows
         data = [header]
         for stu in students:
-            em   = str(stu.get("Email","")).strip().lower()
-            row  = [em,
-                    stu.get("First_Name",""),
-                    stu.get("Last_Name","")]
-            total_score = 0; total_max = 0
+            em          = str(stu.get("Email", "")).strip().lower()
+            row         = [em, stu.get("First_Name", ""), stu.get("Last_Name", "")]
+            total_score = 0
+            total_max   = 0
             for hid in hw_ids:
                 sc = scores.get(em, {}).get(hid, 0)
                 mx = max_marks.get(hid, 0)
@@ -472,19 +565,17 @@ def generate_gradebook_sheet(all_hw_configs: dict):
                 row.append(mx)
                 total_score += sc
                 total_max   += mx
-            row.append(total_score)
-            row.append(total_max)
+            row += [total_score, total_max]
             data.append(row)
 
-        # Create or clear Gradebook tab
         if "Gradebook" in existing:
             ws = sh.worksheet("Gradebook")
             ws.clear()
         else:
             ws = sh.add_worksheet(
                 title="Gradebook",
-                rows=max(len(data)+10, 200),
-                cols=len(header)+5
+                rows=max(len(data) + 10, 200),
+                cols=len(header) + 5
             )
         ws.update("A1", data)
         return True, len(students)
@@ -494,11 +585,10 @@ def generate_gradebook_sheet(all_hw_configs: dict):
 
 # ── Auto-enable check ─────────────────────────────────────────────────────────
 def check_auto_enable():
-    """Enable homeworks whose Auto_Enable_Date has passed. Run on app load."""
     try:
         configs = get_homework_configs()
         now     = datetime.datetime.now()
-        for cfg in configs:
+        for cfg in (configs or []):
             auto_date = cfg.get("Opening_Date", "").strip()
             enabled   = cfg.get("Enabled", "").upper() == "TRUE"
             if auto_date and not enabled:
@@ -514,12 +604,16 @@ def check_auto_enable():
 
 
 # ── Audit ──────────────────────────────────────────────────────────────────────
-def log_audit(actor: str, action: str, detail: str=""):
+@_with_retry()
+def log_audit(actor: str, action: str, detail: str = ""):
     try:
-        ws   = get_tab(TAB_CONFIG)
-        rows = ws.get_all_values()
-        start = next((i for i,r in enumerate(rows)
-                      if len(r)>0 and r[0]=="Timestamp" and i>20), None)
+        ws    = get_tab(TAB_CONFIG)
+        rows  = ws.get_all_values()
+        start = next(
+            (i for i, r in enumerate(rows)
+             if len(r) > 0 and r[0] == "Timestamp" and i > 20),
+            None
+        )
         if start is None:
             return
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -529,14 +623,14 @@ def log_audit(actor: str, action: str, detail: str=""):
 
 
 # ── Deadline ───────────────────────────────────────────────────────────────────
-def parse_deadline(deadline_str: str, grace_minutes: int=15):
+def parse_deadline(deadline_str: str, grace_minutes: int = 15):
     try:
-        dl    = datetime.datetime.strptime(deadline_str.strip(), "%Y-%m-%d %H:%M")
-        dlg   = dl + datetime.timedelta(minutes=grace_minutes)
-        now   = datetime.datetime.now()
-        return now>dlg, now>dl, dl, dlg
+        dl  = datetime.datetime.strptime(deadline_str.strip(), "%Y-%m-%d %H:%M")
+        dlg = dl + datetime.timedelta(minutes=grace_minutes)
+        now = datetime.datetime.now()
+        return now > dlg, now > dl, dl, dlg
     except Exception:
-        far = datetime.datetime(2099,12,31,23,59)
+        far = datetime.datetime(2099, 12, 31, 23, 59)
         return False, False, far, far
 
 
@@ -555,7 +649,8 @@ def record_failed_attempt():
     st.session_state["login_attempts"] = n
     if n >= 5:
         st.session_state["lockout_until"] = (
-            datetime.datetime.now() + datetime.timedelta(minutes=5))
+            datetime.datetime.now() + datetime.timedelta(minutes=5)
+        )
 
 
 def reset_login_attempts():
