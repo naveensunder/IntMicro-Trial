@@ -187,15 +187,7 @@ with tabs[0]:
         else:
             st.error(f"Failed: {result}")
 
-    section_header("Raw Submission Log", "📋")
-    with st.expander("Show all rows"):
-        if not df.empty:
-            st.dataframe(df, use_container_width=True)
-            st.download_button("⬇ Download CSV",
-                               df.to_csv(index=False).encode("utf-8"),
-                               "submissions.csv", "text/csv", key="dl_all")
-        else:
-            st.info("No submissions yet.")
+
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -273,21 +265,16 @@ with tabs[1]:
                 unsafe_allow_html=True)
 
             with st.container():
-                # Inline row with Save button at end (item 13) — 6 cols, tighter
-                col_en, col_title, col_od, col_dd, col_gr, col_save = \
-                    st.columns([0.6, 2.4, 1.8, 1.8, 0.9, 0.8])
+                # Inline row — no title col, Save button now horizontal (items 4, 7)
+                col_en, col_od, col_dd, col_gr, col_save = \
+                    st.columns([0.6, 2.2, 2.2, 1.1, 1.2])
+                new_title = title  # title edits via Details expander only
 
                 with col_en:
                     st.markdown('<div style="font-size:0.68rem;color:#555;font-weight:600;margin-bottom:0.2rem;">ON</div>',
                                 unsafe_allow_html=True)
                     new_en = st.checkbox("On", value=enabled, key=f"en_{hw_id}",
                                          label_visibility="collapsed")
-
-                with col_title:
-                    st.markdown('<div style="font-size:0.68rem;color:#555;font-weight:600;margin-bottom:0.2rem;">TITLE</div>',
-                                unsafe_allow_html=True)
-                    new_title = st.text_input("Title", value=title, key=f"title_{hw_id}",
-                                              label_visibility="collapsed")
 
                 with col_od:
                     st.markdown('<div style="font-size:0.68rem;color:#555;font-weight:600;margin-bottom:0.2rem;">OPENS</div>',
@@ -326,7 +313,6 @@ with tabs[1]:
                     if not new_en and n_subs > 0 and enabled != new_en:
                         st.warning(f"⚠ {n_subs} students submitted. Disabling hides this homework.")
                     update_hw_config(hw_id, "Enabled",      str(new_en).upper())
-                    update_hw_config(hw_id, "Title",         new_title.strip())
                     update_hw_config(hw_id, "Deadline",      new_dl_str)
                     update_hw_config(hw_id, "Opening_Date",  new_op_str)
                     update_hw_config(hw_id, "Grace_Minutes", str(new_gr))
@@ -336,6 +322,7 @@ with tabs[1]:
 
                 # Details expander (item 2 — button inside card)
                 with st.expander(f"Details — {title}", expanded=False):
+                    new_title_det = st.text_input("Title", value=title, key=f"title_{hw_id}")
                     new_ann   = st.text_input("Announcement (shown on Dashboard)",
                                               value=ann, key=f"ann_{hw_id}")
                     new_instr = st.text_area("Instructions (shown on homework page)",
@@ -343,8 +330,9 @@ with tabs[1]:
                     st.caption(f"{len(new_instr)} / 500 characters")
                     if st.button("Save details", key=f"save_det_{hw_id}",
                                  use_container_width=True):
-                        update_hw_config(hw_id, "Announcement", new_ann)
-                        update_hw_config(hw_id, "Instructions",  new_instr)
+                        update_hw_config(hw_id, "Title",         new_title_det.strip())
+                        update_hw_config(hw_id, "Announcement",  new_ann)
+                        update_hw_config(hw_id, "Instructions",   new_instr)
                         log_audit("instructor", "HW_DETAILS", hw_id)
                         st.success("Details saved.")
 
@@ -511,11 +499,7 @@ with tabs[3]:
                         f'<div class="dash-metric-lbl">{lbl}</div>'
                         f'</div>', unsafe_allow_html=True)
 
-                if not q_df.empty:
-                    st.divider()
-                    st.markdown("**Score distribution**")
-                    dist = q_df["Score"].value_counts().sort_index()
-                    st.bar_chart(dist)
+
             else:
                 st.info("No submission data yet.")
 
@@ -786,6 +770,70 @@ with tabs[6]:
             update_instructor_password(new1)
             log_audit("instructor", "PW_CHANGED", "")
             st.success("Password updated.")
+
+    st.divider()
+    section_header("Question Engine Tests", "🧪")
+    st.caption("Runs all parameter functions across 20 dummy emails. Safe to run anytime — no data is written.")
+    if st.button("▶ Run Tests Now", key="run_tests"):
+        with st.spinner("Running tests..."):
+            import sys, math, traceback, importlib
+            try:
+                import numpy as np
+                import unittest.mock as _mock
+                # Patch streamlit in a sub-context
+                _orig = sys.modules.get("streamlit")
+                sys.modules["streamlit"] = _mock.MagicMock()
+                import importlib as _il
+                if "question_engine" in sys.modules:
+                    qe = _il.reload(sys.modules["question_engine"])
+                else:
+                    import question_engine as qe
+                sys.modules["streamlit"] = _orig or sys.modules["streamlit"]
+
+                emails = [f"student{i:02d}@bentley.edu" for i in range(1, 21)]
+                results = []; failures = []
+
+                for email in emails:
+                    try:
+                        I, Px, Py = qe._q1_params(email)
+                        ANS_x = qe.r2(I/Px); ANS_y = qe.r2(I/Py); ANS_s = qe.r2(-Px/Py)
+                        for v, n in [(ANS_x,"X-int"),(ANS_y,"Y-int"),(ANS_s,"Slope")]:
+                            if math.isnan(float(v)) or math.isinf(float(v)):
+                                failures.append(f"Q1 {n} invalid for {email}")
+                        if ANS_x<=0 or ANS_y<=0:
+                            failures.append(f"Q1 negative intercept for {email}")
+                    except Exception as e:
+                        failures.append(f"Q1 crash for {email}: {e}")
+
+                    try:
+                        I2, Px2, Py2, tom_a = qe._q2_params(email)
+                        ANS_jx = qe.r2(I2/(Px2+Py2)); ANS_jy = qe.r2(I2/(Px2+Py2))
+                        if abs(ANS_jx-ANS_jy)>0.01:
+                            failures.append(f"Q2 Jerry X!=Y for {email}")
+                        ANS_tx = qe.r2(I2/Px2)
+                        if ANS_tx<=0:
+                            failures.append(f"Q2 Tom X<=0 for {email}")
+                    except Exception as e:
+                        failures.append(f"Q2 crash for {email}: {e}")
+
+                # Diversity check
+                q1x = [qe.r2(qe._q1_params(e)[0]/qe._q1_params(e)[1]) for e in emails]
+                if len(set(q1x)) < 3:
+                    failures.append("Q1 X-intercept: nearly all students get same answer — seeding broken")
+
+                if failures:
+                    st.markdown(
+                        f'<div class="banner banner-error">❌ {len(failures)} issue(s) found:</div>',
+                        unsafe_allow_html=True)
+                    for f_msg in failures:
+                        st.markdown(f"- {f_msg}")
+                else:
+                    n_checks = len(emails) * 4
+                    st.markdown(
+                        f'<div class="banner banner-success">✅ All {n_checks} checks passed across {len(emails)} students. Safe to deploy.</div>',
+                        unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Test runner error: {e}")
 
     st.divider()
     section_header("End-of-Semester Reset", "⚠️")

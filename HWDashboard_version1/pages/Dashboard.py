@@ -260,23 +260,13 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
         except Exception:
             pass
 
-    # Due date block (prominent)
+    # Due date — compact inline version for left-side display
     if is_tbd:
-        due_html = (
-            f'<div class="hw-due-date-label">Due date</div>'
-            f'<div class="hw-due-date">TBA</div>'
-        )
+        due_html_inline = "Due: TBA"
     elif urgent:
-        due_html = (
-            f'<div class="hw-due-date-label">Due date</div>'
-            f'<div class="hw-due-date" style="color:#DC2626;">⚠ {dl_str}</div>'
-        )
+        due_html_inline = f'<span style="color:#DC2626;font-weight:600;">⚠ Due: {dl_str}</span>'
     else:
-        due_html = (
-            f'<div class="hw-due-date-label">Due date</div>'
-            f'<div class="hw-due-date">{dl_str}</div>'
-            f'<div class="hw-pts">{max_marks} pts</div>'
-        )
+        due_html_inline = f'Due: {dl_str} &nbsp;·&nbsp; {max_marks} pts'
 
     # Score / progress line
     score_html = ""
@@ -305,16 +295,35 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
     card_cls  = "hw-card-open" if is_open else "hw-card"
     title_cls = "hw-title-open" if is_open else "hw-title"
 
+    # Shorten title to week number only for button
+    import re as _re
+    wm = _re.search(r"(\d+)", hw_id)
+    short_num = wm.group(1) if wm else title
+
+    btn_action = ""
+    if is_open and not past_hard:
+        action_word = "Continue" if summary["n_submitted"] > 0 and not summary["all_done"] else "Open"
+        btn_label   = f"{action_word} Week {short_num} →"
+        btn_html    = (
+            f'<div style="flex-shrink:0;margin-left:1rem;">'
+            f'<span class="hw-open-btn-placeholder" data-key="open_{hw_id}">{btn_label}</span>'
+            f'</div>'
+        )
+    else:
+        btn_html = ""
+
     st.markdown(
         f'<div class="{card_cls}">'
         f'<div class="hw-card-header">'
         f'<div style="flex:1;min-width:0;">'
         f'<div class="{title_cls}">{title}{new_badge}</div>'
+        f'<div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:0.25rem;">'
+        f'<span style="font-size:0.82rem;color:#555555;">{due_html_inline}</span>'
         f'{score_html}{ann_html}'
         f'</div>'
-        f'<div style="text-align:right;flex-shrink:0;">'
+        f'</div>'
+        f'<div style="display:flex;align-items:center;gap:0.8rem;flex-shrink:0;">'
         f'{pill_html}'
-        f'<div style="margin-top:0.5rem;">{due_html}</div>'
         f'</div>'
         f'</div>'
         f'</div>',
@@ -322,15 +331,14 @@ def render_hw_card(cfg, is_open=False, is_placeholder=False):
     )
 
     if is_open and not past_hard:
-        btn_label = (
-            f"Continue {title} →"
-            if summary["n_submitted"] > 0 and not summary["all_done"]
-            else f"Open {title} →"
-        )
-        if st.button(btn_label, key=f"open_{hw_id}"):
-            st.session_state["current_hw"]      = hw_id
-            st.session_state["last_visited_hw"] = hw_id
-            st.switch_page("pages/Homework.py")
+        action_word = "Continue" if summary["n_submitted"] > 0 and not summary["all_done"] else "Open"
+        btn_label   = f"{action_word} Week {short_num} →"
+        col_btn, col_sp = st.columns([1, 4])
+        with col_btn:
+            if st.button(btn_label, key=f"open_{hw_id}"):
+                st.session_state["current_hw"]      = hw_id
+                st.session_state["last_visited_hw"] = hw_id
+                st.switch_page("pages/Homework.py")
 
 
 # ── Open assignments ───────────────────────────────────────────────────────────
