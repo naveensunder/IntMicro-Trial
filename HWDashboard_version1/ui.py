@@ -1059,6 +1059,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 def inject_css():
+    # PWA manifest, favicon, accessibility meta, service worker registration
+    st.markdown(
+        """
+        <link rel="manifest" href="/app/static/manifest.json">
+        <link rel="icon" type="image/png" href="/app/static/bentleylogo.png">
+        <link rel="apple-touch-icon" href="/app/static/bentleylogo.png">
+        <meta name="theme-color" content="#1C2B4A">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="EC224">
+        <meta name="description" content="Interactive Homework Portal — EC224 Intermediate Microeconomics, Bentley University">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/app/static/service_worker.js')
+                    .catch(function() {});
+            });
+        }
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown(CSS + JS_HELPERS, unsafe_allow_html=True)
 
 
