@@ -149,7 +149,6 @@ def init_sheets():
             "and utility maximisation with different preference types.",
             "",
         ]])
-        ws.update("A30", [AUDIT_HEADER])
     else:
         ws   = sh.worksheet(TAB_CONFIG)
         rows = ws.get_all_values()
@@ -171,12 +170,7 @@ def init_sheets():
                 "This homework covers budget constraints and utility maximisation.",
                 "",
             ]])
-        has_audit = any(
-            len(r) > 0 and r[0] == "Timestamp" and i > 20
-            for i, r in enumerate(rows)
-        )
-        if not has_audit:
-            ws.update("A30", [AUDIT_HEADER])
+
 
 
 # ── Passwords ──────────────────────────────────────────────────────────────────
