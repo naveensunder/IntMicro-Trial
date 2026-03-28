@@ -8,11 +8,6 @@ name = "Dashboard"
 icon = "📘"
 
 [[pages]]
-path = "pages/Course_Materials.py"
-name = "Course Materials"
-icon = "📁"
-
-[[pages]]
 path = "pages/FAQ.py"
 name = "FAQ"
 icon = "❓"
