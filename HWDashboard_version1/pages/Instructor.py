@@ -30,6 +30,7 @@ from db import (
 from ui import (
     inject_css, page_header, section_header, banner,
     last_updated_chip, page_footer, dark_mode_toggle, COLORS,
+    hide_home_when_authed,
 )
 
 st.set_page_config(
@@ -39,6 +40,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+hide_home_when_authed()
 st.markdown("<style>.block-container { max-width: 1150px; }</style>",
             unsafe_allow_html=True)
 

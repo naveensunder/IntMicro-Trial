@@ -26,7 +26,7 @@ from db import (
 from ui import (
     inject_css, page_header, COLORS, banner, page_footer,
     sidebar_brand, breadcrumb, section_rule, progress_bar,
-    empty_state,
+    empty_state, hide_home_when_authed,
 )
 from question_engine import get_hw_summary
 
@@ -37,6 +37,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+hide_home_when_authed()
 
 
 def _week_num(hw_id: str) -> int:
@@ -58,13 +59,24 @@ record = st.session_state.get("student_record", {})
 # ── Sidebar branding ───────────────────────────────────────────────────────────
 sidebar_brand(name)
 
-# ── Refresh control ───────────────────────────────────────────────────────────
-col_h, col_r = st.columns([5, 1])
-with col_r:
+# ── Top bar: refresh + sign out top right ─────────────────────────────────────
+col_h, col_r1, col_r2 = st.columns([5, 0.7, 0.9])
+with col_r1:
     if st.button("↻", help="Refresh", key="dash_ref"):
         st.session_state["submissions"] = get_student_submissions(email)
         st.session_state["hw_configs"]  = get_homework_configs()
         st.rerun()
+with col_r2:
+    if st.button("Sign out", key="signout_top"):
+        _keys = [
+            "authenticated", "student_email", "student_name", "student_record",
+            "submissions", "hw_configs", "current_hw", "login_flow",
+            "preview_mode", "last_visited_hw", "_continuity_shown",
+            "login_attempts", "lockout_until", "reg_success_name",
+        ]
+        for k in _keys:
+            st.session_state.pop(k, None)
+        st.switch_page("Home.py")
 
 try:
     check_auto_enable()
@@ -83,7 +95,6 @@ with col_h:
         f"Homework Dashboard{last_str}",
     )
 
-breadcrumb("Dashboard")
 
 # ── Last-visited continuity: resume in-progress homework ──────────────────────
 last_hw = st.session_state.get("last_visited_hw")
@@ -373,17 +384,6 @@ if closed_hws:
     for cfg in closed_hws:
         render_hw_card(cfg, is_open=False)
 
-# ── Sign out ───────────────────────────────────────────────────────────────────
-st.divider()
-if st.button("Sign out", key="signout"):
-    _keys = [
-        "authenticated", "student_email", "student_name", "student_record",
-        "submissions", "hw_configs", "current_hw", "login_flow",
-        "preview_mode", "last_visited_hw", "_continuity_shown",
-        "login_attempts", "lockout_until", "reg_success_name",
-    ]
-    for k in _keys:
-        st.session_state.pop(k, None)
-    st.switch_page("Home.py")
+
 
 page_footer()

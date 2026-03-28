@@ -28,7 +28,7 @@ from ui import (
     inject_css, page_header, COLORS, banner, page_footer,
     q_divider, breadcrumb, progress_bar, countdown_timer,
     sidebar_brand, feedback_banner, score_reveal,
-    confetti_if_perfect,
+    confetti_if_perfect, hide_home_when_authed,
 )
 from question_engine import (
     get_questions, render_question, get_hw_summary, ALL_HW_CONFIGS,
@@ -41,6 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+hide_home_when_authed()
 
 # ── Auth gate ──────────────────────────────────────────────────────────────────
 if not st.session_state.get("authenticated"):

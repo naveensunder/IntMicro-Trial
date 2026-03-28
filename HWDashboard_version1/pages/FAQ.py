@@ -7,7 +7,7 @@ import streamlit as st
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from ui import inject_css, page_header, page_footer, breadcrumb, section_rule, sidebar_brand
+from ui import inject_css, page_header, page_footer, breadcrumb, section_rule, sidebar_brand, hide_home_when_authed
 
 st.set_page_config(
     page_title="EC224 — FAQ · Bentley",
@@ -16,6 +16,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+hide_home_when_authed()
 
 if not st.session_state.get("authenticated"):
     st.warning("Please sign in first.")
