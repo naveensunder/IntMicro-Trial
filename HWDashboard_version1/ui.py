@@ -1060,6 +1060,26 @@ document.addEventListener('DOMContentLoaded', function() {
 """
 
 
+def hide_home_when_authed():
+    """
+    Call on any authenticated page to hide the Home link from sidebar.
+    Uses CSS targeting the sidebar nav link whose href ends in '/' (Home).
+    """
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebarNav"] a[href="/"] {
+            display: none !important;
+        }
+        [data-testid="stSidebarNav"] li:has(a[href="/"]) {
+            display: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def inject_css():
     # PWA manifest, favicon, accessibility meta, service worker registration
     st.markdown(
