@@ -1,0 +1,30 @@
+[[pages]]
+path = "Home.py"
+name = "Home"
+
+[[pages]]
+path = "pages/Dashboard.py"
+name = "Dashboard"
+icon = "📘"
+
+[[pages]]
+path = "pages/Course_Materials.py"
+name = "Course Materials"
+icon = "📁"
+
+[[pages]]
+path = "pages/FAQ.py"
+name = "FAQ"
+icon = "❓"
+
+[[pages]]
+path = "pages/Homework.py"
+name = "Homework"
+icon = "📝"
+hidden = true
+
+[[pages]]
+path = "pages/Instructor.py"
+name = "Instructor"
+icon = "🔐"
+hidden = true
